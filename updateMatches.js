@@ -1,31 +1,66 @@
-name: Update Football Matches
+import fs from "fs";
+import fetch from "node-fetch";
+import { execSync } from "child_process";
 
-on:
-  schedule:
-    - cron: "*/2 * * * *"
-  workflow_dispatch:
+// ================= CONFIG =================
+const API_KEY = process.env.FOOTBALL_API_KEY;
+const API_URL = "https://api-football-v1.p.rapidapi.com/v3/fixtures?live=all";
+const OUTPUT_FILE = "matches.json";
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
+// ================= CHECK API KEY =================
+if (!API_KEY) {
+  console.error("❌ FOOTBALL_API_KEY is missing");
+  process.exit(1);
+}
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+// ================= FETCH MATCHES =================
+async function fetchMatches() {
+  const res = await fetch(API_URL, {
+    headers: {
+      "X-RapidAPI-Key": API_KEY,
+      "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"
+    }
+  });
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
+  if (!res.ok) {
+    throw new Error(`API Error: ${res.status}`);
+  }
 
-      - name: Install dependencies
-        run: npm install
+  const data = await res.json();
+  return data.response || [];
+}
 
-      - name: Create service account file
-        run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > serviceAccountKey.json
+// ================= MAIN =================
+(async () => {
+  try {
+    console.log("⚽ Fetching matches...");
 
-      - name: Run updater
-        env:
-          API_KEY: ${{ secrets.API_KEY }}
-        run: node updateMatches.js
+    const matches = await fetchMatches();
+
+    fs.writeFileSync(
+      OUTPUT_FILE,
+      JSON.stringify(
+        {
+          updatedAt: new Date().toISOString(),
+          matches
+        },
+        null,
+        2
+      )
+    );
+
+    console.log(`✅ Saved ${matches.length} matches`);
+
+    // ========== GIT AUTO COMMIT ==========
+    execSync("git config user.name 'github-actions[bot]'");
+    execSync("git config user.email 'github-actions[bot]@users.noreply.github.com'");
+    execSync("git add .");
+    execSync("git commit -m 'auto: update matches' || echo 'No changes'");
+    execSync("git push");
+
+    console.log("🚀 Changes pushed to repo");
+  } catch (err) {
+    console.error("❌ Error:", err.message);
+    process.exit(1);
+  }
+})();
