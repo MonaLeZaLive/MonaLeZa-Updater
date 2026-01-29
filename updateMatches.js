@@ -25,11 +25,9 @@ const db = admin.firestore();
 
 // ===== FETCH MATCHES =====
 async function fetchMatches() {
-  console.log("⚽ Fetching matches...");
+  console.log("🧪 Testing API key...");
 
-  const today = new Date().toISOString().split("T")[0];
-const url = `https://v3.football.api-sports.io/fixtures?date=${today}`;
-
+  const url = `https://v3.football.api-sports.io/status`;
 
   const res = await fetch(url, {
     headers: {
@@ -37,13 +35,20 @@ const url = `https://v3.football.api-sports.io/fixtures?date=${today}`;
     }
   });
 
+  const text = await res.text();
+  console.log("STATUS CODE:", res.status);
+  console.log("RAW RESPONSE:", text);
+
   if (!res.ok) {
     throw new Error(`API Error: ${res.status}`);
   }
 
-  const data = await res.json();
-  return data.response || [];
+  const data = JSON.parse(text);
+  console.log("✅ API is working");
+
+  return [];
 }
+
 
 // ===== UPDATE FIRESTORE =====
 async function updateFirestore(matches) {
