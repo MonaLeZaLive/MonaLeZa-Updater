@@ -27,7 +27,9 @@ const db = admin.firestore();
 async function fetchMatches() {
   console.log("⚽ Fetching matches...");
 
-  const url = `https://v3.football.api-sports.io/fixtures?live=all`;
+  const today = new Date().toISOString().split("T")[0];
+const url = `https://v3.football.api-sports.io/fixtures?date=${today}`;
+
 
   const res = await fetch(url, {
     headers: {
