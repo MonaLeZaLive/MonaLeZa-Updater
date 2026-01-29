@@ -5,7 +5,8 @@ import fs from "fs";
 console.log("🚀 Starting updater...");
 
 // ===== ENV =====
-const API_KEY = process.env.API_KEY;
+const API_KEY = process.env.FOOTBALL_API_KEY;
+
 if (!API_KEY) {
   console.error("❌ API_KEY is missing");
   process.exit(1);
