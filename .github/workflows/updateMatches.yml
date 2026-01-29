@@ -1,9 +1,8 @@
 name: Update Football Matches
 
 on:
-  schedule:
-   # - cron: "*/2 * * * *"
-  workflow_dispatch:
+ 
+ workflow_dispatch:
 
 jobs:
   update:
