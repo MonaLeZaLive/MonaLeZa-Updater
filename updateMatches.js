@@ -30,6 +30,11 @@ console.log("🔥 Firebase Admin Connected Successfully");
 
 const axios = require("axios");
 
+if (!process.env.API_FOOTBALL_KEY) {
+  console.error("❌ API_FOOTBALL_KEY secret is missing");
+  process.exit(1);
+}
+
 const API = axios.create({
   baseURL: "https://v3.football.api-sports.io",
   headers: {
@@ -39,35 +44,22 @@ const API = axios.create({
 
 /**
  * ===============================
- * Get LIVE Fixtures
+ * Test API STATUS (Basic Check)
  * ===============================
  */
 
-async function getLiveFixtures() {
+async function testApiStatus() {
   try {
-    const res = await API.get("/fixtures", {
-      params: {
-        live: "all",
-      },
-    });
+    const res = await API.get("/status");
 
-    console.log("⚽ Live Matches Count:", res.data.response.length);
-
-    // مؤقتًا نطبع أول ماتش بس
-    if (res.data.response.length > 0) {
-      console.log("📌 Sample Match:", {
-        league: res.data.response[0].league.name,
-        teams: res.data.response[0].teams,
-        goals: res.data.response[0].goals,
-        status: res.data.response[0].fixture.status,
-      });
-    } else {
-      console.log("😴 No live matches right now");
-    }
+    console.log("✅ API STATUS RESPONSE:");
+    console.log(JSON.stringify(res.data, null, 2));
   } catch (err) {
-    console.error("❌ API ERROR (LIVE):");
-    console.error(err.response?.data || err.message);
+    console.error("❌ API STATUS ERROR:");
+    console.error(
+      err.response?.data || err.message
+    );
   }
 }
 
-getLiveFixtures();
+testApiStatus();
