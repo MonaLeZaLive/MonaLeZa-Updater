@@ -17,14 +17,21 @@ if (!process.env.FIREBASE_DB_URL) {
   throw new Error("FIREBASE_DB_URL is missing");
 }
 
+// ===== Firebase Init (SAFE) =====
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const databaseURL = process.env.FIREBASE_DB_URL;
+
+if (!databaseURL) {
+  throw new Error("FIREBASE_DB_URL is missing");
+}
+
 admin.initializeApp({
-  credential: admin.credential.cert(
-    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-  ),
-  databaseURL: process.env.FIREBASE_DB_URL,
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL,
 });
 
 const db = admin.database();
+
 console.log("🔥 Firebase Connected Successfully");
 
 // ===== API Football =====
