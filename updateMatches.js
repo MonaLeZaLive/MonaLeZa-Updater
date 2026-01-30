@@ -11,9 +11,7 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   process.exit(1);
 }
 
-const serviceAccount = JSON.parse(
-  process.env.FIREBASE_SERVICE_ACCOUNT
-);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -23,7 +21,6 @@ admin.initializeApp({
 const db = admin.database();
 
 console.log("🔥 Firebase Admin Connected Successfully");
-
 
 /**
  * ===============================
@@ -42,27 +39,35 @@ const API = axios.create({
 
 /**
  * ===============================
- * Test API Connection
+ * Get LIVE Fixtures
  * ===============================
  */
 
-async function testApi() {
+async function getLiveFixtures() {
   try {
     const res = await API.get("/fixtures", {
       params: {
-        date: new Date().toISOString().split("T")[0],
+        live: "all",
       },
     });
 
-    console.log("⚽ Fixtures Today:", res.data.response.length);
+    console.log("⚽ Live Matches Count:", res.data.response.length);
+
+    // مؤقتًا نطبع أول ماتش بس
+    if (res.data.response.length > 0) {
+      console.log("📌 Sample Match:", {
+        league: res.data.response[0].league.name,
+        teams: res.data.response[0].teams,
+        goals: res.data.response[0].goals,
+        status: res.data.response[0].fixture.status,
+      });
+    } else {
+      console.log("😴 No live matches right now");
+    }
   } catch (err) {
-  console.error("❌ API Error FULL:");
-  console.error("Status:", err.response?.status);
-  console.error("Headers:", err.response?.headers);
-  console.error("Data:", JSON.stringify(err.response?.data, null, 2));
+    console.error("❌ API ERROR (LIVE):");
+    console.error(err.response?.data || err.message);
+  }
 }
 
-}
-
-testApi();
-
+getLiveFixtures();
