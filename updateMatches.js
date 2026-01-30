@@ -19,7 +19,6 @@ admin.initializeApp({
 });
 
 const db = admin.database();
-
 console.log("🔥 Firebase Admin Connected Successfully");
 
 /**
@@ -48,44 +47,41 @@ const API = axios.create({
  * ===============================
  */
 
-async function getLiveFixtures() {
+async function updateLiveMatches() {
   try {
     const res = await API.get("/fixtures", {
-      params: {
-        live: "all",
-      },
+      params: { live: "all" },
     });
 
-    const matches = res.data.response || [];
-
+    const matches = res.data.response;
     console.log(`⚽ Live Matches Count: ${matches.length}`);
 
-    if (matches.length === 0) {
-      console.log("😴 No live matches right now");
-      return;
-    }
+    const updates = {};
 
-    const match = matches[0];
+    matches.forEach((match) => {
+      const fixtureId = match.fixture.id;
 
-    console.log("📌 Sample Live Match:", {
-      fixtureId: match.fixture.id,
-      league: match.league.name,
-      teams: {
-        home: match.teams.home.name,
-        away: match.teams.away.name,
-      },
-      goals: match.goals,
-      status: match.fixture.status.long,
+      updates[`liveMatches/${fixtureId}`] = {
+        fixtureId,
+        league: match.league,
+        teams: match.teams,
+        goals: match.goals,
+        status: match.fixture.status,
+        updatedAt: Date.now(),
+      };
     });
 
-    // جاهزين للخطوة الجاية (Firebase write)
-    // await db.ref(`liveMatches/${match.fixture.id}`).set(match);
-
+    if (Object.keys(updates).length > 0) {
+      await db.ref().update(updates);
+      console.log("✅ Live matches updated in Firebase");
+    } else {
+      console.log("😴 No live matches to update");
+    }
   } catch (err) {
-    console.error("❌ API ERROR (LIVE FIXTURES):");
+    console.error("❌ API ERROR (LIVE):");
     console.error(err.response?.data || err.message);
+    process.exit(1);
   }
 }
 
-// Entry point
-getLiveFixtures();
+updateLiveMatches();
