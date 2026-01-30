@@ -19,3 +19,17 @@ const db = admin.database();
 
 console.log("🔥 Firebase Admin Connected Successfully");
 
+/**
+ * ===============================
+ * API Football Configuration
+ * ===============================
+ */
+
+const axios = require("axios");
+
+const API = axios.create({
+  baseURL: "https://v3.football.api-sports.io",
+  headers: {
+    "x-apisports-key": process.env.API_FOOTBALL_KEY,
+  },
+});
