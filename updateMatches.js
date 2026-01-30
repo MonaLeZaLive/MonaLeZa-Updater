@@ -6,6 +6,11 @@
 
 const admin = require("firebase-admin");
 
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  console.error("❌ FIREBASE_SERVICE_ACCOUNT secret is missing");
+  process.exit(1);
+}
+
 const serviceAccount = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT
 );
@@ -18,6 +23,7 @@ admin.initializeApp({
 const db = admin.database();
 
 console.log("🔥 Firebase Admin Connected Successfully");
+
 
 /**
  * ===============================
