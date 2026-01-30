@@ -2,41 +2,49 @@
  * updateMatches.js
  * Fetch today's matches from API-Football
  * Save data to Firebase Realtime Database
+ * WITH FULL DEBUG
  */
 
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// ===== ENV CHECK =====
+// ================= ENV CHECK =================
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-  throw new Error("FIREBASE_SERVICE_ACCOUNT is missing");
+  throw new Error("❌ FIREBASE_SERVICE_ACCOUNT is missing");
 }
 if (!process.env.API_FOOTBALL_KEY) {
-  throw new Error("API_FOOTBALL_KEY is missing");
+  throw new Error("❌ API_FOOTBALL_KEY is missing");
 }
 
-// ===== Firebase Init =====
+// ================= Firebase Init =================
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://monaleza-live-b3e0c-default-rtdb.europe-west1.firebasedatabase.app",
+  databaseURL:
+    "https://monaleza-live-b3e0c-default-rtdb.europe-west1.firebasedatabase.app",
 });
-
-
 
 const db = admin.database();
 
-console.log("🔥 Firebase Connected");
-console.log("🔥 Project:", serviceAccount.project_id);
+// ================= DEBUG: CONNECTION =================
+(async () => {
+  const connectedSnap = await db.ref(".info/connected").once("value");
 
-// ===== API Football =====
+  console.log("🧭 ===== FIREBASE DEBUG =====");
+  console.log("🔥 Project ID:", serviceAccount.project_id);
+  console.log("🌍 Database URL:", admin.app().options.databaseURL);
+  console.log("📡 Connected:", connectedSnap.val());
+  console.log("🧭 =========================");
+})();
+
+// ================= API Football =================
 const API_URL = "https://v3.football.api-sports.io/fixtures";
 const API_HEADERS = {
   "x-apisports-key": process.env.API_FOOTBALL_KEY,
 };
 
-// ===== Leagues (FINAL) =====
+// ================= Leagues (FINAL) =================
 const LEAGUES = [
   // 🌍 National teams
   { key: "fifa_world_cup", name: "FIFA World Cup", id: 1 },
@@ -64,15 +72,32 @@ const LEAGUES = [
   { key: "saudi_pro_league", name: "Saudi Pro League", id: 307 },
 ];
 
+// ================= MAIN FUNCTION =================
 async function updateMatches() {
   const rootRef = db.ref("matches_today");
 
-  // clear old data
+  console.log("✍️ Writing root path:", rootRef.toString());
+
+  // ===== TEST WRITE (CRITICAL) =====
+  await db.ref("__where_am_i").set({
+    ok: true,
+    project: serviceAccount.project_id,
+    databaseURL: admin.app().options.databaseURL,
+    time: new Date().toISOString(),
+  });
+
+  console.log("🧪 Test write __where_am_i DONE");
+
+  // ===== Clear old data =====
   await rootRef.remove();
+  console.log("🧹 Old matches_today cleared");
 
   const today = new Date().toISOString().split("T")[0];
+  console.log("📅 Fetching matches for:", today);
 
   for (const league of LEAGUES) {
+    console.log(`🔎 League: ${league.name} (${league.id})`);
+
     const res = await axios.get(API_URL, {
       headers: API_HEADERS,
       params: {
@@ -81,7 +106,10 @@ async function updateMatches() {
       },
     });
 
-    if (!res.data.response?.length) continue;
+    if (!res.data.response || res.data.response.length === 0) {
+      console.log(`⚠️ No matches for ${league.name}`);
+      continue;
+    }
 
     const leagueRef = rootRef.child(league.key);
 
@@ -102,12 +130,14 @@ async function updateMatches() {
         stadium: match.fixture.venue?.name || "",
       });
     }
+
+    console.log(`✅ Saved ${res.data.response.length} matches for ${league.name}`);
   }
 
-  console.log("✅ Matches written to Firebase");
+  console.log("✅ Matches written to Firebase SUCCESS");
 }
 
-// ===== RUN & CLEAN EXIT =====
+// ================= RUN & CLEAN EXIT =================
 updateMatches()
   .then(async () => {
     await admin.app().delete();
@@ -115,8 +145,7 @@ updateMatches()
     process.exit(0);
   })
   .catch(async (err) => {
-    console.error("❌ Error:", err);
+    console.error("❌ ERROR:", err);
     await admin.app().delete();
-    await db.ref("test").set({ ok: true, time: Date.now() });
     process.exit(1);
   });
