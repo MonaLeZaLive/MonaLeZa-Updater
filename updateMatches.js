@@ -33,3 +33,26 @@ const API = axios.create({
     "x-apisports-key": process.env.API_FOOTBALL_KEY,
   },
 });
+
+/**
+ * ===============================
+ * Test API Connection
+ * ===============================
+ */
+
+async function testApi() {
+  try {
+    const res = await API.get("/fixtures", {
+      params: {
+        date: new Date().toISOString().split("T")[0],
+      },
+    });
+
+    console.log("⚽ Fixtures Today:", res.data.response.length);
+  } catch (err) {
+    console.error("❌ API Error:", err.response?.data || err.message);
+  }
+}
+
+testApi();
+
