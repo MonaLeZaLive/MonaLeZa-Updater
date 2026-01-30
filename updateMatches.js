@@ -56,8 +56,12 @@ async function testApi() {
 
     console.log("⚽ Fixtures Today:", res.data.response.length);
   } catch (err) {
-    console.error("❌ API Error:", err.response?.data || err.message);
-  }
+  console.error("❌ API Error FULL:");
+  console.error("Status:", err.response?.status);
+  console.error("Headers:", err.response?.headers);
+  console.error("Data:", JSON.stringify(err.response?.data, null, 2));
+}
+
 }
 
 testApi();
