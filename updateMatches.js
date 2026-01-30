@@ -8,26 +8,21 @@
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// ===== Firebase Init =====
+// ===== Check required env =====
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   throw new Error("FIREBASE_SERVICE_ACCOUNT is missing");
 }
 
-if (!process.env.FIREBASE_DB_URL) {
-  throw new Error("FIREBASE_DB_URL is missing");
+if (!process.env.API_FOOTBALL_KEY) {
+  throw new Error("API_FOOTBALL_KEY is missing");
 }
 
-// ===== Firebase Init (SAFE) =====
+// ===== Firebase Init =====
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-const databaseURL = process.env.FIREBASE_DB_URL;
-
-if (!databaseURL) {
-  throw new Error("FIREBASE_DB_URL is missing");
-}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL,
+  databaseURL: "https://monaleza-live-default-rtdb.firebaseio.com",
 });
 
 const db = admin.database();
@@ -65,7 +60,7 @@ const LEAGUES = [
 ];
 
 async function updateMatches() {
-  // Clear old data
+  // ===== Clear old data safely =====
   await db.ref("matches_today").set({});
 
   const today = new Date().toISOString().split("T")[0];
@@ -79,7 +74,7 @@ async function updateMatches() {
       },
     });
 
-    if (!res.data.response.length) continue;
+    if (!res.data.response || res.data.response.length === 0) continue;
 
     const leagueRef = db.ref(`matches_today/${league.name}`);
 
@@ -108,6 +103,6 @@ async function updateMatches() {
 }
 
 updateMatches().catch((err) => {
-  console.error("❌ Update failed:", err.message);
+  console.error("❌ Update failed:", err);
   process.exit(1);
 });
