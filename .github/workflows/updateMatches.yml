@@ -2,8 +2,8 @@ name: Update Football Matches
 
 on:
   schedule:
-    - cron: "*/2 * * * *"   # كل دقيقتين
-  workflow_dispatch:        # تشغيل يدوي لو حبيت
+    - cron: "*/2 * * * *"
+  workflow_dispatch:
 
 jobs:
   run-script:
@@ -26,8 +26,3 @@ jobs:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node updateMatches.js
-
-      - name: Run update script
-        run: node updateMatches.js
-
-
