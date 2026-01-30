@@ -1,18 +1,16 @@
 /**
  * updateMatches.js
  * Fetch today's matches from API-Football
- * Filter by specific leagues
- * Save data to Firebase in matches_today
+ * Save data to Firebase Realtime Database
  */
 
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// ===== Check required env =====
+// ===== ENV CHECK =====
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   throw new Error("FIREBASE_SERVICE_ACCOUNT is missing");
 }
-
 if (!process.env.API_FOOTBALL_KEY) {
   throw new Error("API_FOOTBALL_KEY is missing");
 }
@@ -27,7 +25,8 @@ admin.initializeApp({
 
 const db = admin.database();
 
-console.log("🔥 Firebase Connected Successfully");
+console.log("🔥 Firebase Connected");
+console.log("🔥 Project:", serviceAccount.project_id);
 
 // ===== API Football =====
 const API_URL = "https://v3.football.api-sports.io/fixtures";
@@ -35,48 +34,34 @@ const API_HEADERS = {
   "x-apisports-key": process.env.API_FOOTBALL_KEY,
 };
 
-// ===== Allowed Leagues =====
+// ===== Leagues =====
 const LEAGUES = [
-  { name: "FIFA World Cup", id: 1 },
-  { name: "UEFA Euro", id: 4 },
-  { name: "Copa America", id: 9 },
-  { name: "Africa Cup of Nations", id: 6 },
-  { name: "AFC Asian Cup", id: 7 },
-
-  { name: "UEFA Champions League", id: 2 },
-  { name: "FIFA Club World Cup", id: 15 },
-  { name: "Copa Libertadores", id: 13 },
-  { name: "AFC Champions League", id: 17 },
-  { name: "CAF Champions League", id: 16 },
-
   { name: "Premier League", id: 39 },
   { name: "La Liga", id: 140 },
   { name: "Serie A", id: 135 },
   { name: "Bundesliga", id: 78 },
   { name: "Ligue 1", id: 61 },
-
   { name: "Egyptian Premier League", id: 233 },
   { name: "Saudi Pro League", id: 307 },
 ];
 
 async function updateMatches() {
-  // ===== Clear old data safely =====
-  await db.ref("matches_today").set({});
+  const rootRef = db.ref("matches_today");
+
+  // clear old
+  await rootRef.remove();
 
   const today = new Date().toISOString().split("T")[0];
 
   for (const league of LEAGUES) {
     const res = await axios.get(API_URL, {
       headers: API_HEADERS,
-      params: {
-        league: league.id,
-        date: today,
-      },
+      params: { league: league.id, date: today },
     });
 
-    if (!res.data.response || res.data.response.length === 0) continue;
+    if (!res.data.response?.length) continue;
 
-    const leagueRef = db.ref(`matches_today/${league.name}`);
+    const leagueRef = rootRef.child(league.name);
 
     await leagueRef.set({
       league_logo: res.data.response[0].league.logo,
@@ -84,25 +69,30 @@ async function updateMatches() {
     });
 
     for (const match of res.data.response) {
-      const matchId = `m_${match.fixture.id}`;
-
-      await leagueRef.child(`matches/${matchId}`).set({
+      await leagueRef.child(`matches/m_${match.fixture.id}`).set({
         home_team: match.teams.home.name,
         home_logo: match.teams.home.logo,
         away_team: match.teams.away.name,
         away_logo: match.teams.away.logo,
-        time: match.fixture.date.substring(11, 16),
+        time: match.fixture.date.slice(11, 16),
         status: match.fixture.status.short,
         stadium: match.fixture.venue?.name || "",
-        channel: "",
       });
     }
   }
 
-  console.log("✅ Matches updated successfully");
+  console.log("✅ Matches written to Firebase");
 }
 
-updateMatches().catch((err) => {
-  console.error("❌ Update failed:", err);
-  process.exit(1);
-});
+// ===== RUN & FORCE EXIT =====
+updateMatches()
+  .then(async () => {
+    await admin.app().delete(); // 🔥 ده السطر السحري
+    console.log("👋 Firebase app closed");
+    process.exit(0);
+  })
+  .catch(async (err) => {
+    console.error("❌ Error:", err);
+    await admin.app().delete();
+    process.exit(1);
+  });
