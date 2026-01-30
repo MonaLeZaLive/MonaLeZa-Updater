@@ -44,22 +44,16 @@ const API = axios.create({
 
 /**
  * ===============================
- * Test API STATUS (Basic Check)
+ * Get LIVE Fixtures
  * ===============================
  */
 
-async function testApiStatus() {
+async function getLiveFixtures() {
   try {
-    const res = await API.get("/status");
+    const res = await API.get("/fixtures", {
+      params: {
+        live: "all",
+      },
+    });
 
-    console.log("✅ API STATUS RESPONSE:");
-    console.log(JSON.stringify(res.data, null, 2));
-  } catch (err) {
-    console.error("❌ API STATUS ERROR:");
-    console.error(
-      err.response?.data || err.message
-    );
-  }
-}
-
-testApiStatus();
+    const matches = res.da
