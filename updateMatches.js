@@ -115,5 +115,6 @@ updateMatches()
   .catch(async (err) => {
     console.error("❌ Error:", err);
     await admin.app().delete();
+    await db.ref("test").set({ ok: true, time: Date.now() });
     process.exit(1);
   });
