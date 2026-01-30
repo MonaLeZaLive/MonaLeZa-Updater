@@ -34,21 +34,38 @@ const API_HEADERS = {
   "x-apisports-key": process.env.API_FOOTBALL_KEY,
 };
 
-// ===== Leagues =====
+// ===== Leagues (FINAL) =====
 const LEAGUES = [
-  { name: "Premier League", id: 39 },
-  { name: "La Liga", id: 140 },
-  { name: "Serie A", id: 135 },
-  { name: "Bundesliga", id: 78 },
-  { name: "Ligue 1", id: 61 },
-  { name: "Egyptian Premier League", id: 233 },
-  { name: "Saudi Pro League", id: 307 },
+  // 🌍 National teams
+  { key: "fifa_world_cup", name: "FIFA World Cup", id: 1 },
+  { key: "uefa_euro", name: "UEFA Euro", id: 4 },
+  { key: "copa_america", name: "Copa America", id: 9 },
+  { key: "africa_cup_of_nations", name: "Africa Cup of Nations", id: 6 },
+  { key: "afc_asian_cup", name: "AFC Asian Cup", id: 7 },
+
+  // 🏆 Continental clubs
+  { key: "uefa_champions_league", name: "UEFA Champions League", id: 2 },
+  { key: "caf_champions_league", name: "CAF Champions League", id: 16 },
+  { key: "afc_champions_league", name: "AFC Champions League", id: 17 },
+  { key: "copa_libertadores", name: "Copa Libertadores", id: 13 },
+  { key: "fifa_club_world_cup", name: "FIFA Club World Cup", id: 15 },
+
+  // 🇪🇺 Top leagues
+  { key: "premier_league", name: "Premier League", id: 39 },
+  { key: "la_liga", name: "La Liga", id: 140 },
+  { key: "serie_a", name: "Serie A", id: 135 },
+  { key: "bundesliga", name: "Bundesliga", id: 78 },
+  { key: "ligue_1", name: "Ligue 1", id: 61 },
+
+  // 🇪🇬🇸🇦 Local
+  { key: "egyptian_premier_league", name: "Egyptian Premier League", id: 233 },
+  { key: "saudi_pro_league", name: "Saudi Pro League", id: 307 },
 ];
 
 async function updateMatches() {
   const rootRef = db.ref("matches_today");
 
-  // clear old
+  // clear old data
   await rootRef.remove();
 
   const today = new Date().toISOString().split("T")[0];
@@ -56,14 +73,18 @@ async function updateMatches() {
   for (const league of LEAGUES) {
     const res = await axios.get(API_URL, {
       headers: API_HEADERS,
-      params: { league: league.id, date: today },
+      params: {
+        league: league.id,
+        date: today,
+      },
     });
 
     if (!res.data.response?.length) continue;
 
-    const leagueRef = rootRef.child(league.name);
+    const leagueRef = rootRef.child(league.key);
 
     await leagueRef.set({
+      league_name: league.name,
       league_logo: res.data.response[0].league.logo,
       matches: {},
     });
@@ -84,10 +105,10 @@ async function updateMatches() {
   console.log("✅ Matches written to Firebase");
 }
 
-// ===== RUN & FORCE EXIT =====
+// ===== RUN & CLEAN EXIT =====
 updateMatches()
   .then(async () => {
-    await admin.app().delete(); // 🔥 ده السطر السحري
+    await admin.app().delete();
     console.log("👋 Firebase app closed");
     process.exit(0);
   })
