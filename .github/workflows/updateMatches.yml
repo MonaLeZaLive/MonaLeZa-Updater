@@ -1,28 +1,28 @@
 name: Update Football Matches
 
 on:
- 
- workflow_dispatch:
+  schedule:
+    - cron: "*/2 * * * *"   # كل دقيقتين
+  workflow_dispatch:        # تشغيل يدوي لو حبيت
 
 jobs:
-  update:
+  run-script:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
 
-      - name: Create Firebase key
-        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > serviceAccountKey.json
-
-      - name: Run updater
+      - name: Run update script
         env:
-          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
-        run: node updateMatches.js
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/updateMatches.js
