@@ -11,6 +11,11 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   process.exit(1);
 }
 
+if (!process.env.API_FOOTBALL_KEY) {
+  console.error("❌ API_FOOTBALL_KEY secret is missing");
+  process.exit(1);
+}
+
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -29,11 +34,6 @@ console.log("🔥 Firebase Admin Connected Successfully");
 
 const axios = require("axios");
 
-if (!process.env.API_FOOTBALL_KEY) {
-  console.error("❌ API_FOOTBALL_KEY secret is missing");
-  process.exit(1);
-}
-
 const API = axios.create({
   baseURL: "https://v3.football.api-sports.io",
   headers: {
@@ -43,45 +43,63 @@ const API = axios.create({
 
 /**
  * ===============================
- * Get LIVE Fixtures
+ * CONFIG
+ * البطولات المسموح بيها فقط
  * ===============================
  */
 
-async function updateLiveMatches() {
+const ALLOWED_LEAGUES = [
+  39,  // Premier League
+  140, // La Liga
+  135, // Serie A
+  78,  // Bundesliga
+  61,  // Ligue 1
+  307, // Saudi League
+  233, // Egyptian League
+];
+
+/**
+ * ===============================
+ * Update Today's Matches
+ * ===============================
+ */
+
+async function updateMatchesToday() {
   try {
+    const today = new Date().toISOString().split("T")[0];
+
     const res = await API.get("/fixtures", {
-      params: { live: "all" },
+      params: { date: today },
     });
 
-    const matches = res.data.response;
-    console.log(`⚽ Live Matches Count: ${matches.length}`);
+    const fixtures = res.data.response.filter(f =>
+      ALLOWED_LEAGUES.includes(f.league.id)
+    );
 
     const updates = {};
 
-    matches.forEach((match) => {
-      const fixtureId = match.fixture.id;
-
-      updates[`liveMatches/${fixtureId}`] = {
-        fixtureId,
-        league: match.league,
-        teams: match.teams,
+    fixtures.forEach(match => {
+      updates[match.fixture.id] = {
+        fixtureId: match.fixture.id,
+        leagueId: match.league.id,
+        leagueName: match.league.name,
+        home: match.teams.home.name,
+        away: match.teams.away.name,
         goals: match.goals,
-        status: match.fixture.status,
-        updatedAt: Date.now(),
+        status: match.fixture.status.short,
+        time: match.fixture.date,
       };
     });
 
-    if (Object.keys(updates).length > 0) {
-      await db.ref().update(updates);
-      console.log("✅ Live matches updated in Firebase");
-    } else {
-      console.log("😴 No live matches to update");
-    }
+    await db.ref("matches_today").set(updates);
+
+    console.log(`✅ matches_today updated (${fixtures.length} matches)`);
   } catch (err) {
-    console.error("❌ API ERROR (LIVE):");
-    console.error(err.response?.data || err.message);
-    process.exit(1);
+    console.error("❌ Update Error:", err.response?.data || err.message);
+  } finally {
+    // مهم جدًا عشان GitHub Action يقفل
+    process.exit(0);
   }
 }
 
-updateLiveMatches();
+updateMatchesToday();
