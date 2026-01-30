@@ -23,8 +23,11 @@ jobs:
 
       - name: Run update script
         env:
-           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node updateMatches.js
+
       - name: Run update script
         run: node updateMatches.js
+
 
