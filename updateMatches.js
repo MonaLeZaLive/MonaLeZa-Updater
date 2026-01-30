@@ -66,7 +66,7 @@ const LEAGUES = [
 
 async function updateMatches() {
   // Clear old data
-  await db.ref("matches_today").update();
+  await db.ref("matches_today").set();
 
   const today = new Date().toISOString().split("T")[0];
 
