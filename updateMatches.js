@@ -5,45 +5,59 @@
  * Save data to Firebase in matches_today
  */
 
-import axios from "axios";
-import admin from "firebase-admin";
+const axios = require("axios");
+const admin = require("firebase-admin");
 
-// Firebase init
+// ===== Firebase Init =====
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  throw new Error("FIREBASE_SERVICE_ACCOUNT is missing");
+}
+
+if (!process.env.FIREBASE_DB_URL) {
+  throw new Error("FIREBASE_DB_URL is missing");
+}
+
 admin.initializeApp({
-  credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+  credential: admin.credential.cert(
+    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+  ),
   databaseURL: process.env.FIREBASE_DB_URL,
 });
 
 const db = admin.database();
+console.log("🔥 Firebase Connected Successfully");
 
+// ===== API Football =====
 const API_URL = "https://v3.football.api-sports.io/fixtures";
 const API_HEADERS = {
   "x-apisports-key": process.env.API_FOOTBALL_KEY,
 };
 
+// ===== Allowed Leagues =====
 const LEAGUES = [
   { name: "FIFA World Cup", id: 1 },
   { name: "UEFA Euro", id: 4 },
   { name: "Copa America", id: 9 },
   { name: "Africa Cup of Nations", id: 6 },
   { name: "AFC Asian Cup", id: 7 },
+
   { name: "UEFA Champions League", id: 2 },
   { name: "FIFA Club World Cup", id: 15 },
   { name: "Copa Libertadores", id: 13 },
   { name: "AFC Champions League", id: 17 },
   { name: "CAF Champions League", id: 16 },
+
   { name: "Premier League", id: 39 },
   { name: "La Liga", id: 140 },
   { name: "Serie A", id: 135 },
   { name: "Bundesliga", id: 78 },
   { name: "Ligue 1", id: 61 },
+
   { name: "Egyptian Premier League", id: 233 },
   { name: "Saudi Pro League", id: 307 },
 ];
 
 async function updateMatches() {
-  console.log("🔥 Firebase Connected Successfully");
-
   // Clear old data
   await db.ref("matches_today").remove();
 
@@ -86,4 +100,7 @@ async function updateMatches() {
   console.log("✅ Matches updated successfully");
 }
 
-updateMatches().catch(console.error);
+updateMatches().catch((err) => {
+  console.error("❌ Update failed:", err.message);
+  process.exit(1);
+});
