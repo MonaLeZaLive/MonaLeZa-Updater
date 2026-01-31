@@ -1,16 +1,13 @@
 /**
  * updateMatches.js
- * FINAL STABLE VERSION
- * - No date
- * - No timezone bugs
- * - Season based
- * - Ready for LIVE / NS / FT
+ * Fetch ALL football fixtures from API-Football (no filters)
+ * Save everything to Firebase Realtime Database
  */
 
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-/* ================= ENV CHECK ================= */
+// ===== ENV CHECK =====
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   throw new Error("FIREBASE_SERVICE_ACCOUNT is missing");
 }
@@ -18,125 +15,115 @@ if (!process.env.API_FOOTBALL_KEY) {
   throw new Error("API_FOOTBALL_KEY is missing");
 }
 
-/* ================= FIREBASE INIT ================= */
+// ===== Firebase Init =====
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://monaleza-live-b3e0c-default-rtdb.europe-west1.firebasedatabase.app",
+  databaseURL:
+    "https://monaleza-live-b3e0c-default-rtdb.europe-west1.firebasedatabase.app/",
 });
 
 const db = admin.database();
+console.log("🔥 Firebase Connected");
 
-console.log("🔥 Firebase connected:", serviceAccount.project_id);
-
-/* ================= API FOOTBALL ================= */
+// ===== API Football =====
 const API_URL = "https://v3.football.api-sports.io/fixtures";
-const HEADERS = {
+const API_HEADERS = {
   "x-apisports-key": process.env.API_FOOTBALL_KEY,
 };
 
-/* ================= LEAGUES ================= */
-const LEAGUES = [
-  { name: "FIFA World Cup", id: 1 },
-  { name: "UEFA Euro", id: 4 },
-  { name: "Copa America", id: 9 },
-  { name: "Africa Cup of Nations", id: 6 },
-  { name: "AFC Asian Cup", id: 7 },
-
-  { name: "UEFA Champions League", id: 2 },
-  { name: "CAF Champions League", id: 16 },
-  { name: "AFC Champions League", id: 17 },
-  { name: "Copa Libertadores", id: 13 },
-  { name: "FIFA Club World Cup", id: 15 },
-
-  { name: "Premier League", id: 39 },
-  { name: "La Liga", id: 140 },
-  { name: "Serie A", id: 135 },
-  { name: "Bundesliga", id: 78 },
-  { name: "Ligue 1", id: 61 },
-
-  { name: "Egyptian Premier League", id: 233 },
-  { name: "Saudi Pro League", id: 307 },
-];
-
-/* ================= MAIN FUNCTION ================= */
 async function updateMatches() {
-  const rootRef = db.ref("matches_today");
+  const rootRef = db.ref("all_matches");
 
-  await rootRef.set({
-    updated_at: Date.now(),
-  });
+  // امسح القديم
+  await rootRef.remove();
 
-  let total = 0;
+  let page = 1;
+  let totalSaved = 0;
+  let hasMore = true;
 
-  for (const league of LEAGUES) {
-    console.log(`\n⚽ Fetching ${league.name}`);
+  while (hasMore) {
+    console.log(`📦 Fetching page ${page}...`);
 
-    try {
-      const res = await axios.get(API_URL, {
-        headers: HEADERS,
-        params: {
-          league: league.id,
-          season: 2025,
-        },
-      });
+    const res = await axios.get(API_URL, {
+      headers: API_HEADERS,
+      params: {
+        page,
+      },
+    });
 
-      const fixtures = res.data.response || [];
+    const fixtures = res.data.response || [];
 
-      if (fixtures.length === 0) {
-        console.log("➖ No matches");
-        continue;
-      }
-
-      const leagueRef = rootRef.child(league.name.replace(/ /g, "_"));
-
-      await leagueRef.set({
-        league_name: league.name,
-        league_logo: fixtures[0].league.logo,
-        matches: [],
-      });
-
-      const matches = fixtures.map(f => ({
-        fixture_id: f.fixture.id,
-        home_team: f.teams.home.name,
-        home_logo: f.teams.home.logo,
-        away_team: f.teams.away.name,
-        away_logo: f.teams.away.logo,
-        home_score: f.goals.home,
-        away_score: f.goals.away,
-        status: f.fixture.status.short,
-        minute: f.fixture.status.elapsed,
-        time: f.fixture.date.slice(11, 16),
-      }));
-
-      // ترتيب: لايف → لم تبدأ → انتهت
-      matches.sort((a, b) => {
-        const order = { "1H": 1, "2H": 1, "HT": 1, "ET": 1, "P": 1, "NS": 2, "FT": 3 };
-        return (order[a.status] || 4) - (order[b.status] || 4);
-      });
-
-      await leagueRef.child("matches").set(matches);
-
-      total += matches.length;
-      console.log(`✅ ${matches.length} matches saved`);
-    } catch (err) {
-      console.error(`❌ ${league.name} error`, err.response?.data || err.message);
+    if (fixtures.length === 0) {
+      hasMore = false;
+      break;
     }
+
+    for (const match of fixtures) {
+      const leagueId = match.league.id;
+      const fixtureId = match.fixture.id;
+
+      await rootRef
+        .child(`league_${leagueId}`)
+        .child(`fixture_${fixtureId}`)
+        .set({
+          fixture_id: fixtureId,
+          date_utc: match.fixture.date,
+          status: match.fixture.status.short,
+
+          league: {
+            id: leagueId,
+            name: match.league.name,
+            country: match.league.country,
+            season: match.league.season,
+            logo: match.league.logo,
+          },
+
+          teams: {
+            home: {
+              id: match.teams.home.id,
+              name: match.teams.home.name,
+              logo: match.teams.home.logo,
+            },
+            away: {
+              id: match.teams.away.id,
+              name: match.teams.away.name,
+              logo: match.teams.away.logo,
+            },
+          },
+
+          goals: match.goals,
+          score: match.score,
+          venue: match.fixture.venue,
+        });
+
+      totalSaved++;
+    }
+
+    page++;
+    hasMore = page <= res.data.paging.total;
   }
 
-  console.log(`\n🎉 DONE – Total matches: ${total}`);
+  if (totalSaved === 0) {
+    await rootRef.set({
+      message: "لا يوجد أي مباريات في قاعدة بيانات API حالياً",
+      time: new Date().toISOString(),
+    });
+  }
+
+  console.log(`✅ Done. Total matches saved: ${totalSaved}`);
 }
 
-/* ================= RUN ================= */
+// ===== RUN =====
 updateMatches()
   .then(async () => {
     await admin.app().delete();
     console.log("👋 Firebase closed");
     process.exit(0);
   })
-  .catch(async err => {
-    console.error("❌ Fatal error", err);
+  .catch(async (err) => {
+    console.error("❌ Error:", err.message);
     await admin.app().delete();
     process.exit(1);
   });
