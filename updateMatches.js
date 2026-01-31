@@ -1,7 +1,7 @@
 /**
  * updateMatches.js
- * Fetch ALL football fixtures from API-Football (no filters)
- * Save everything to Firebase Realtime Database
+ * Fetch TODAY matches for CAF Champions League (ID = 12)
+ * Save to Firebase Realtime Database
  */
 
 const axios = require("axios");
@@ -33,86 +33,78 @@ const API_HEADERS = {
   "x-apisports-key": process.env.API_FOOTBALL_KEY,
 };
 
+// ===== CONSTANTS =====
+const LEAGUE_ID = 12; // CAF Champions League
+const todayUTC = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
 async function updateMatches() {
-  const rootRef = db.ref("all_matches");
+  const rootRef = db.ref("matches_today/caf_champions_league");
 
   // امسح القديم
   await rootRef.remove();
 
-  let page = 1;
-  let totalSaved = 0;
-  let hasMore = true;
+  console.log(`📅 Date (UTC): ${todayUTC}`);
+  console.log(`🏆 League ID: ${LEAGUE_ID}`);
 
-  while (hasMore) {
-    console.log(`📦 Fetching page ${page}...`);
+  const res = await axios.get(API_URL, {
+    headers: API_HEADERS,
+    params: {
+      league: LEAGUE_ID,
+      date: todayUTC,
+      timezone: "UTC",
+    },
+  });
 
-    const res = await axios.get(API_URL, {
-      headers: API_HEADERS,
-      params: {
-        page,
-      },
-    });
+  const matches = res.data.response || [];
 
-    const fixtures = res.data.response || [];
+  console.log(`📊 Matches found: ${matches.length}`);
 
-    if (fixtures.length === 0) {
-      hasMore = false;
-      break;
-    }
-
-    for (const match of fixtures) {
-      const leagueId = match.league.id;
-      const fixtureId = match.fixture.id;
-
-      await rootRef
-        .child(`league_${leagueId}`)
-        .child(`fixture_${fixtureId}`)
-        .set({
-          fixture_id: fixtureId,
-          date_utc: match.fixture.date,
-          status: match.fixture.status.short,
-
-          league: {
-            id: leagueId,
-            name: match.league.name,
-            country: match.league.country,
-            season: match.league.season,
-            logo: match.league.logo,
-          },
-
-          teams: {
-            home: {
-              id: match.teams.home.id,
-              name: match.teams.home.name,
-              logo: match.teams.home.logo,
-            },
-            away: {
-              id: match.teams.away.id,
-              name: match.teams.away.name,
-              logo: match.teams.away.logo,
-            },
-          },
-
-          goals: match.goals,
-          score: match.score,
-          venue: match.fixture.venue,
-        });
-
-      totalSaved++;
-    }
-
-    page++;
-    hasMore = page <= res.data.paging.total;
-  }
-
-  if (totalSaved === 0) {
+  // لو مفيش مباريات
+  if (matches.length === 0) {
     await rootRef.set({
-      message: "لا يوجد أي مباريات في قاعدة بيانات API حالياً",
-      time: new Date().toISOString(),
+      league_id: LEAGUE_ID,
+      league_name: "CAF Champions League",
+      date: todayUTC,
+      message: "لا توجد مباريات اليوم في دوري أبطال أفريقيا",
+      updated_at: new Date().toISOString(),
+    });
+
+    console.log("⚠️ No matches today");
+    return;
+  }
+
+  // اكتب بيانات البطولة
+  await rootRef.set({
+    league_id: LEAGUE_ID,
+    league_name: matches[0].league.name,
+    league_logo: matches[0].league.logo,
+    date: todayUTC,
+    matches: {},
+  });
+
+  // اكتب المباريات
+  for (const match of matches) {
+    await rootRef.child(`matches/m_${match.fixture.id}`).set({
+      fixture_id: match.fixture.id,
+      date_utc: match.fixture.date,
+      time_utc: match.fixture.date.slice(11, 16),
+      status: match.fixture.status.short,
+
+      home_team: match.teams.home.name,
+      home_logo: match.teams.home.logo,
+
+      away_team: match.teams.away.name,
+      away_logo: match.teams.away.logo,
+
+      stadium: match.fixture.venue?.name || "",
+      city: match.fixture.venue?.city || "",
+
+      goals: match.goals,
+      score: match.score,
     });
   }
 
-  console.log(`✅ Done. Total matches saved: ${totalSaved}`);
+  console.log("✅ CAF Champions League matches saved");
 }
 
 // ===== RUN =====
