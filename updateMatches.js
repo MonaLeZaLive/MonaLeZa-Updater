@@ -1,21 +1,20 @@
 /**
  * updateMatches.js
- * Fetch matches from API-Football by LEAGUE ID (UTC)
- * Save data to Firebase Realtime Database
+ * FINAL + DEBUG VERSION
  */
 
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// ================= ENV CHECK =================
+// ===== ENV CHECK =====
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-  throw new Error("❌ FIREBASE_SERVICE_ACCOUNT is missing");
+  throw new Error("FIREBASE_SERVICE_ACCOUNT is missing");
 }
 if (!process.env.API_FOOTBALL_KEY) {
-  throw new Error("❌ API_FOOTBALL_KEY is missing");
+  throw new Error("API_FOOTBALL_KEY is missing");
 }
 
-// ================= Firebase Init =================
+// ===== Firebase Init =====
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -26,20 +25,27 @@ admin.initializeApp({
 const db = admin.database();
 
 console.log("🔥 Firebase Connected");
-console.log("📌 Project:", serviceAccount.project_id);
+console.log("🔥 Project:", serviceAccount.project_id);
 
-// ================= API Football =================
+// ===== API Football =====
 const API_URL = "https://v3.football.api-sports.io/fixtures";
 const API_HEADERS = {
   "x-apisports-key": process.env.API_FOOTBALL_KEY,
 };
 
-// ================= LEAGUES (ID BASED) =================
+// ===== Leagues (IDs ONLY) =====
 const LEAGUES = [
   { key: "fifa_world_cup", name: "FIFA World Cup", id: 1 },
+  { key: "uefa_euro", name: "UEFA Euro", id: 4 },
+  { key: "copa_america", name: "Copa America", id: 9 },
+  { key: "africa_cup_of_nations", name: "Africa Cup of Nations", id: 6 },
+  { key: "afc_asian_cup", name: "AFC Asian Cup", id: 7 },
+
   { key: "uefa_champions_league", name: "UEFA Champions League", id: 2 },
   { key: "caf_champions_league", name: "CAF Champions League", id: 16 },
   { key: "afc_champions_league", name: "AFC Champions League", id: 17 },
+  { key: "copa_libertadores", name: "Copa Libertadores", id: 13 },
+  { key: "fifa_club_world_cup", name: "FIFA Club World Cup", id: 15 },
 
   { key: "premier_league", name: "Premier League", id: 39 },
   { key: "la_liga", name: "La Liga", id: 140 },
@@ -51,73 +57,81 @@ const LEAGUES = [
   { key: "saudi_pro_league", name: "Saudi Pro League", id: 307 },
 ];
 
-// ================= MAIN FUNCTION =================
 async function updateMatches() {
   const rootRef = db.ref("matches_today");
 
-  // امسح القديم
-  await rootRef.remove();
+  // reset
+  await rootRef.set({
+    updated_at: Date.now(),
+    timezone: "UTC",
+  });
 
-  // UTC DATE (مهم)
-  const todayUTC = new Date().toISOString().split("T")[0];
-  console.log("📅 UTC Date:", todayUTC);
+  const todayUTC = new Date().toISOString().slice(0, 10);
+  console.log("📅 Fetching matches for UTC date:", todayUTC);
 
   let totalMatches = 0;
 
   for (const league of LEAGUES) {
-    console.log(`🔍 Fetching league ${league.name} (${league.id})`);
+    console.log(`\n🔍 Fetching ${league.name} (ID: ${league.id})`);
 
-    const res = await axios.get(API_URL, {
-      headers: API_HEADERS,
-      params: {
-        league: league.id,
-        date: todayUTC,
-        timezone: "UTC",
-      },
-    });
+    try {
+      const res = await axios.get(API_URL, {
+        headers: API_HEADERS,
+        params: {
+          league: league.id,
+          date: todayUTC,
+          timezone: "UTC",
+        },
+      });
 
-    const matches = res.data.response || [];
-    console.log(`➡️ ${league.name}: ${matches.length} matches`);
+      console.log("🧾 Raw API response keys:", Object.keys(res.data));
 
-    if (matches.length === 0) continue;
+      const matches = res.data.response || [];
+      console.log(`➡️ ${league.name}: ${matches.length} matches`);
 
-    totalMatches += matches.length;
+      const leagueRef = rootRef.child(league.key);
 
-    const leagueRef = rootRef.child(league.key);
+      if (matches.length === 0) {
+        await leagueRef.set({
+          league_name: league.name,
+          message: "No matches today",
+        });
+        continue;
+      }
 
-    await leagueRef.set({
-      league_name: league.name,
-      league_logo: matches[0].league.logo,
-      matches: {},
-    });
+      totalMatches += matches.length;
 
-    for (const match of matches) {
-      await leagueRef.child(`matches/m_${match.fixture.id}`).set({
-        home_team: match.teams.home.name,
-        home_logo: match.teams.home.logo,
-        away_team: match.teams.away.name,
-        away_logo: match.teams.away.logo,
-        time: match.fixture.date.slice(11, 16),
-        status: match.fixture.status.short,
-        stadium: match.fixture.venue?.name || "",
-        channel: "",
+      await leagueRef.set({
+        league_name: league.name,
+        league_logo: matches[0].league.logo,
+        matches: {},
+      });
+
+      for (const match of matches) {
+        await leagueRef.child(`matches/m_${match.fixture.id}`).set({
+          home_team: match.teams.home.name,
+          home_logo: match.teams.home.logo,
+          away_team: match.teams.away.name,
+          away_logo: match.teams.away.logo,
+          time: match.fixture.date.slice(11, 16),
+          status: match.fixture.status.short,
+          stadium: match.fixture.venue?.name || "",
+        });
+      }
+    } catch (err) {
+      console.error(`❌ Error in ${league.name}:`, err.response?.data || err.message);
+
+      await rootRef.child(league.key).set({
+        league_name: league.name,
+        error: "API error",
       });
     }
   }
 
-  // لو مفيش أي ماتشات خالص
-  if (totalMatches === 0) {
-    await rootRef.set({
-      status: "NO_MATCHES_TODAY",
-      date: todayUTC,
-    });
-    console.log("😴 No matches today");
-  } else {
-    console.log(`✅ Total matches written: ${totalMatches}`);
-  }
+  console.log(`\n✅ Finished. Total matches written: ${totalMatches}`);
 }
 
-// ================= RUN & EXIT =================
+// ===== RUN =====
 updateMatches()
   .then(async () => {
     await admin.app().delete();
@@ -125,7 +139,7 @@ updateMatches()
     process.exit(0);
   })
   .catch(async (err) => {
-    console.error("❌ ERROR:", err.message);
+    console.error("❌ Fatal Error:", err);
     await admin.app().delete();
     process.exit(1);
   });
