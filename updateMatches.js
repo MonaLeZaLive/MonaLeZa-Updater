@@ -59,7 +59,7 @@ const LEAGUES = [
 ];
 
 async function updateLiveMatches() {
-  const rootRef = db.ref("live_matches");
+  const rootRef = db.ref("matches_today");
   await rootRef.remove();
 
   console.log("🔴 Fetching LIVE matches...");
