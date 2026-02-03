@@ -48,7 +48,16 @@ async function testFetch() {
 
   console.log("✅ API Response OK");
   console.log("Matches count:", res.data.response.length);
+
+  // 🔥 Firebase write (test)
+  await db.ref(`debug/${today}`).set({
+    fetchedAt: new Date().toISOString(),
+    matchesCount: res.data.response.length,
+  });
+
+  console.log("📝 Data written to Firebase");
 }
+
 
 // ============================
 // 4️⃣ Run
