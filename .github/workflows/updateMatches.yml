@@ -1,9 +1,9 @@
 name: Update Football Matches
 
 on:
- # schedule:
-  #  - cron: "*/15 * * * *"
   workflow_dispatch:
+  # schedule:
+  #   - cron: "*/15 * * * *"
 
 jobs:
   run-script:
@@ -21,8 +21,15 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run update script
+      # ===== STEP مؤقت لاستخراج IDs =====
+      - name: Get League IDs
+        run: node getLeagueIds.js
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: node updateMatches.js
+
+      # ===== STEP الأساسي (مقفول مؤقتًا) =====
+      # - name: Run update script
+      #   run: node updateMatches.js
+      #   env:
+      #     API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+      #     FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
