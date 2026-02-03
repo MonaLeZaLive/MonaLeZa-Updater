@@ -22,10 +22,11 @@ jobs:
         run: npm install
 
       # ===== STEP مؤقت لاستخراج IDs =====
-      - name: Get League IDs
-        run: node getLeagueIds.js
+      - name: Get All Leagues
+        run: node getAllLeagues.js
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+         API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+
 
       # ===== STEP الأساسي (مقفول مؤقتًا) =====
       # - name: Run update script
