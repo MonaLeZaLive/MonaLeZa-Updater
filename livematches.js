@@ -4,6 +4,13 @@ import axios from "axios";
 import dayjs from "dayjs";
 import admin from "firebase-admin";
 
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+
 /* ============================
    Firebase Init
 ============================ */
@@ -82,7 +89,8 @@ const LEAGUES = {
     process.exit(0);
   }
 
-  const now = dayjs().unix();
+  const now = dayjs().tz("Africa/Cairo").unix();
+
 
   // خارج وقت الماتشات
   if (now < meta.first_match_ts || now > meta.last_match_ts + 7200) {
