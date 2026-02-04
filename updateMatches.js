@@ -1,13 +1,10 @@
-// updateMatches.js
-
 import axios from "axios";
 import dayjs from "dayjs";
 import admin from "firebase-admin";
 
 /* ============================
-   1️⃣ Firebase Init
+   Firebase Init
 ============================ */
-
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -19,9 +16,8 @@ admin.initializeApp({
 const db = admin.database();
 
 /* ============================
-   2️⃣ API-Football Client
+   API Init
 ============================ */
-
 const api = axios.create({
   baseURL: "https://v3.football.api-sports.io",
   headers: {
@@ -30,226 +26,191 @@ const api = axios.create({
 });
 
 /* ============================
-   3️⃣ Leagues Map (ID ➜ Arabic Name)
+   Leagues Map (FIXED)
 ============================ */
-
 const LEAGUES = {
-  // 🌍 International & Continental
-  1: "كأس العالم",
-  2: "دوري أبطال أوروبا",
-  3: "الدوري الأوروبي",
-  6: "كأس الأمم الإفريقية",
-  200: "دوري أبطال أفريقيا",
-  201: "كأس الكونفدرالية الأفريقية",
-  202: "كأس السوبر الأفريقي",
-  17: "دوري أبطال آسيا",
+  // International
+  1: "World Cup",
+  2: "UEFA Champions League",
+  3: "UEFA Europa League",
+  6: "Africa Cup of Nations",
+  200: "CAF Champions League",
+  201: "CAF Confederation Cup",
+  202: "CAF Super Cup",
+  17: "AFC Champions League",
 
-  // 🇬🇧 England
-  39: "الدوري الإنجليزي",
-  45: "كأس الاتحاد الإنجليزي",
-  48: "كأس كاراباو",
-  528: "كأس السوبر الإنجليزي",
+  // England
+  39: "Premier League",
+  45: "FA Cup",
+  48: "EFL Cup",
+  528: "FA Community Shield",
 
-  // 🇪🇸 Spain
-  140: "الدوري الإسباني",
-  143: "كأس إسبانيا",
-  556: "كأس السوبر الإسباني",
+  // Spain
+  140: "La Liga",
+  143: "Copa del Rey",
+  556: "Spanish Super Cup",
 
-  // 🇮🇹 Italy
-  135: "الدوري الإيطالي",
-  137: "كأس إيطاليا",
-  547: "كأس السوبر الإيطالي",
+  // Italy
+  135: "Serie A",
+  137: "Coppa Italia",
+  547: "Italian Super Cup",
 
-  // 🇩🇪 Germany
-  78: "الدوري الألماني",
-  81: "كأس ألمانيا",
-  529: "كأس السوبر الألماني",
+  // Germany
+  78: "Bundesliga",
+  81: "DFB Pokal",
+  529: "German Super Cup",
 
-  // 🇫🇷 France
-  61: "الدوري الفرنسي",
-  66: "كأس فرنسا",
-  526: "كأس السوبر الفرنسي",
+  // France
+  61: "Ligue 1",
+  66: "Coupe de France",
+  526: "French Super Cup",
 
-  // 🇸🇦 Saudi Arabia
-  307: "الدوري السعودي",
-  308: "كأس خادم الحرمين الشريفين",
-  309: "كأس السوبر السعودي",
+  // Saudi
+  307: "Saudi Pro League",
+  308: "King's Cup",
+  309: "Saudi Super Cup",
 
-  // 🇪🇬 Egypt
-  233: "الدوري المصري",
-  714: "كأس مصر",
-  539: "كأس السوبر المصري",
+  // Egypt
+  233: "Egyptian League",
+  714: "Egypt Cup",
+  539: "Egyptian Super Cup",
 };
 
 /* ============================
-   4️⃣ League Order (IMPORTANT)
+   League Order (FIXED)
 ============================ */
-
 const LEAGUE_ORDER = [
-  "كأس العالم",
-  "دوري أبطال أوروبا",
-  "الدوري الأوروبي",
-  "كأس الأمم الإفريقية",
-  "دوري أبطال أفريقيا",
-  "كأس الكونفدرالية الأفريقية",
-  "كأس السوبر الأفريقي",
-  "دوري أبطال آسيا",
+  "World Cup",
+  "UEFA Champions League",
+  "UEFA Europa League",
+  "Africa Cup of Nations",
+  "CAF Champions League",
+  "CAF Confederation Cup",
+  "CAF Super Cup",
+  "AFC Champions League",
 
-  "الدوري الإنجليزي",
-  "الدوري الإسباني",
-  "الدوري الإيطالي",
-  "الدوري الألماني",
-  "الدوري الفرنسي",
+  "Premier League",
+  "La Liga",
+  "Serie A",
+  "Bundesliga",
+  "Ligue 1",
 
-  "كأس الاتحاد الإنجليزي",
-  "كأس كاراباو",
-  "كأس إسبانيا",
-  "كأس إيطاليا",
-  "كأس ألمانيا",
-  "كأس فرنسا",
+  "FA Cup",
+  "EFL Cup",
+  "Copa del Rey",
+  "Coppa Italia",
+  "DFB Pokal",
+  "Coupe de France",
 
-  "كأس السوبر الإنجليزي",
-  "كأس السوبر الإسباني",
-  "كأس السوبر الإيطالي",
-  "كأس السوبر الفرنسي",
-  "كأس السوبر الألماني",
-   
-  "الدوري السعودي",
-  "كأس خادم الحرمين الشريفين",
-  "كأس السوبر السعودي",
+  "FA Community Shield",
+  "Spanish Super Cup",
+  "Italian Super Cup",
+  "French Super Cup",
+  "German Super Cup",
 
-  "الدوري المصري",
-  "كأس مصر",
-  "كأس السوبر المصري",
+  "Saudi Pro League",
+  "King's Cup",
+  "Saudi Super Cup",
+
+  "Egyptian League",
+  "Egypt Cup",
+  "Egyptian Super Cup",
 ];
 
 /* ============================
-   5️⃣ Helpers
+   Helpers
 ============================ */
-
-function matchPriority(status) {
-  if (["1H", "2H", "ET", "P"].includes(status)) return 1; // LIVE
-  if (status === "NS") return 2; // NOT STARTED
-  return 3; // FINISHED
+function sortMatches(matches) {
+  const priority = { LIVE: 1, NS: 2, FT: 3 };
+  return matches.sort(
+    (a, b) =>
+      priority[a.fixture.status.short] -
+      priority[b.fixture.status.short]
+  );
 }
 
-/* ============================
-   6️⃣ Core Function
-============================ */
-
-async function updateMatchesForDay(type) {
-  const date =
-    type === "yesterday"
-      ? dayjs().subtract(1, "day")
-      : type === "tomorrow"
-      ? dayjs().add(1, "day")
-      : dayjs();
-
-  const dateStr = date.format("YYYY-MM-DD");
-
-  const path =
-    type === "yesterday"
-      ? "matches_yesterday"
-      : type === "tomorrow"
-      ? "matches_tomorrow"
-      : "matches_today";
-
-  console.log(`📅 Fetching ${type} matches for ${dateStr}`);
-
+async function fetchByDate(date, path) {
   const res = await api.get("/fixtures", {
-    params: { date: dateStr },
+    params: { date },
   });
 
-  const fixtures = res.data.response || [];
+  const grouped = {};
 
-  const filtered = fixtures.filter((f) => LEAGUES[f.league.id]);
+  res.data.response.forEach((m) => {
+    const leagueName = LEAGUES[m.league.id];
+    if (!leagueName) return;
 
-  const leaguesTemp = {};
-  const timestamps = [];
-
-  filtered.forEach((f) => {
-    const leagueName = LEAGUES[f.league.id];
-    const ts = f.fixture.timestamp;
-
-    timestamps.push(ts);
-
-    if (!leaguesTemp[leagueName]) {
-      leaguesTemp[leagueName] = {
-        league_logo: f.league.logo,
+    if (!grouped[leagueName]) {
+      grouped[leagueName] = {
+        league_logo: m.league.logo,
         matches: [],
       };
     }
 
-    leaguesTemp[leagueName].matches.push({
-      id: f.fixture.id,
-      status: f.fixture.status.short,
-      minute: f.fixture.status.elapsed,
-      priority: matchPriority(f.fixture.status.short),
+    grouped[leagueName].matches.push({
+      id: m.fixture.id,
+      status: m.fixture.status.short,
+      minute: m.fixture.status.elapsed,
+      time: dayjs(m.fixture.date).format("HH:mm"),
 
-      home_team: f.teams.home.name,
-      home_logo: f.teams.home.logo,
-      home_score: f.goals.home,
+      home_team: m.teams.home.name,
+      home_logo: m.teams.home.logo,
+      home_score: m.goals.home,
 
-      away_team: f.teams.away.name,
-      away_logo: f.teams.away.logo,
-      away_score: f.goals.away,
+      away_team: m.teams.away.name,
+      away_logo: m.teams.away.logo,
+      away_score: m.goals.away,
 
-      stadium: f.fixture.venue?.name || "",
-      time: dayjs(f.fixture.date).format("HH:mm"),
-      channel: "",
+      stadium: m.fixture.venue?.name || "",
     });
   });
 
-  // 🟢 Sort matches inside league
-  Object.values(leaguesTemp).forEach((league) => {
-    league.matches.sort((a, b) => a.priority - b.priority);
-    league.matches.forEach((m) => delete m.priority);
-  });
-
-  // 🟢 Order leagues
-  const orderedLeagues = {};
-  LEAGUE_ORDER.forEach((name) => {
-    if (leaguesTemp[name]) {
-      orderedLeagues[name] = leaguesTemp[name];
+  const ordered = {};
+  LEAGUE_ORDER.forEach((l) => {
+    if (grouped[l]) {
+      grouped[l].matches = sortMatches(grouped[l].matches);
+      ordered[l] = grouped[l];
     }
   });
 
-  // 🟢 Write matches
-  await db.ref(path).set(orderedLeagues);
+  await db.ref(path).set(ordered);
+}
 
-  // 🟢 Save meta ONLY for today
-  if (type === "today" && timestamps.length) {
+/* ============================
+   Main
+============================ */
+(async () => {
+  const today = dayjs();
+  const yesterday = today.subtract(1, "day").format("YYYY-MM-DD");
+  const todayStr = today.format("YYYY-MM-DD");
+  const tomorrow = today.add(1, "day").format("YYYY-MM-DD");
+
+  console.log("⬅️ Yesterday");
+  await fetchByDate(yesterday, "matches_yesterday");
+
+  console.log("📅 Today");
+  await fetchByDate(todayStr, "matches_today");
+
+  console.log("➡️ Tomorrow");
+  await fetchByDate(tomorrow, "matches_tomorrow");
+
+  // meta for live updates
+  const res = await api.get("/fixtures", { params: { date: todayStr } });
+  const fixtures = res.data.response;
+
+  if (fixtures.length) {
+    const times = fixtures.map((f) =>
+      dayjs(f.fixture.date).unix()
+    );
+
     await db.ref("meta/today").set({
-      date: dateStr,
-      first_match_ts: Math.min(...timestamps),
-      last_match_ts: Math.max(...timestamps),
+      date: todayStr,
+      first_match_ts: Math.min(...times),
+      last_match_ts: Math.max(...times),
       updated_at: new Date().toISOString(),
     });
   }
 
-  // Debug
-  await db.ref(`debug/${dateStr}`).set({
-    totalFromApi: fixtures.length,
-    afterFilter: filtered.length,
-  });
-
-  console.log(`✅ ${type} matches written: ${filtered.length}`);
-}
-
-/* ============================
-   7️⃣ Run
-============================ */
-
-(async () => {
-  try {
-    await updateMatchesForDay("yesterday");
-    await updateMatchesForDay("today");
-    await updateMatchesForDay("tomorrow");
-
-    console.log("🚀 All updates completed");
-    process.exit(0);
-  } catch (err) {
-    console.error("❌ Error:", err.response?.data || err.message);
-    process.exit(1);
-  }
+  console.log("✅ Update matches done");
+  process.exit(0);
 })();
