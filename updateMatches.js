@@ -30,7 +30,7 @@ const api = axios.create({
 });
 
 /* ============================
-   3️⃣ Leagues Map (ID ➜ Arabic Name)
+   3️⃣ Leagues Map
 ============================ */
 
 const LEAGUES = {
@@ -81,53 +81,61 @@ const LEAGUES = {
 };
 
 /* ============================
-   4️⃣ Main Function
+   4️⃣ Core Function
 ============================ */
 
-async function updateTodayMatches() {
-  const today = dayjs().format("YYYY-MM-DD");
-  console.log("📅 Fetching matches for:", today);
+async function updateMatchesForDay(type) {
+  let date;
+
+  if (type === "yesterday") {
+    date = dayjs().subtract(1, "day");
+  } else if (type === "tomorrow") {
+    date = dayjs().add(1, "day");
+  } else {
+    date = dayjs();
+  }
+
+  const dateStr = date.format("YYYY-MM-DD");
+  const path =
+    type === "yesterday"
+      ? "matches_yesterday"
+      : type === "tomorrow"
+      ? "matches_tomorrow"
+      : "matches_today";
+
+  console.log(`📅 Fetching ${type} matches for:`, dateStr);
 
   const res = await api.get("/fixtures", {
-    params: { date: today },
+    params: { date: dateStr },
   });
 
   const fixtures = res.data.response || [];
-  console.log("📦 Total fixtures:", fixtures.length);
 
-  // 🔍 Filter leagues
   const filtered = fixtures.filter((f) => LEAGUES[f.league.id]);
-  console.log("🎯 After league filter:", filtered.length);
 
-  /* ============================
-     5️⃣ Group matches by league
-     (MATCHES UI STRUCTURE)
-  ============================ */
-
-  const grouped = {};
+  const leaguesMap = {};
 
   filtered.forEach((f) => {
     const leagueName = LEAGUES[f.league.id];
 
-    if (!grouped[leagueName]) {
-      grouped[leagueName] = {
+    if (!leaguesMap[leagueName]) {
+      leaguesMap[leagueName] = {
         league_logo: f.league.logo,
         matches: {},
       };
     }
 
-    grouped[leagueName].matches[f.fixture.id] = {
+    leaguesMap[leagueName].matches[f.fixture.id] = {
+      status: f.fixture.status.short,
+      minute: f.fixture.status.elapsed,
+
       home_team: f.teams.home.name,
       home_logo: f.teams.home.logo,
+      home_score: f.goals.home,
 
       away_team: f.teams.away.name,
       away_logo: f.teams.away.logo,
-
-      home_score: f.goals.home,
       away_score: f.goals.away,
-
-      status: f.fixture.status.short,
-      minute: f.fixture.status.elapsed,
 
       stadium: f.fixture.venue?.name || "",
       time: dayjs(f.fixture.date).format("HH:mm"),
@@ -135,35 +143,30 @@ async function updateTodayMatches() {
     };
   });
 
-  /* ============================
-     6️⃣ Write to Firebase
-  ============================ */
+  await db.ref(path).set(leaguesMap);
 
-  if (Object.keys(grouped).length === 0) {
-    await db.ref("matches_today").set(null);
-    console.log("⚠️ No matches today");
-  } else {
-    await db.ref("matches_today").set(grouped);
-    console.log("✅ Leagues written:", Object.keys(grouped).length);
-  }
-
-  await db.ref(`debug/${today}`).set({
+  await db.ref(`debug/${dateStr}`).set({
     totalFromApi: fixtures.length,
     afterFilter: filtered.length,
-    leagues: Object.keys(grouped),
   });
+
+  console.log(`✅ ${type} matches written:`, filtered.length);
 }
 
 /* ============================
-   7️⃣ Run
+   5️⃣ Run (once per day)
 ============================ */
 
-updateTodayMatches()
-  .then(() => {
-    console.log("🚀 Update completed successfully");
+(async () => {
+  try {
+    await updateMatchesForDay("yesterday");
+    await updateMatchesForDay("today");
+    await updateMatchesForDay("tomorrow");
+
+    console.log("🚀 All updates completed");
     process.exit(0);
-  })
-  .catch((err) => {
+  } catch (err) {
     console.error("❌ Error:", err.response?.data || err.message);
     process.exit(1);
-  });
+  }
+})();
