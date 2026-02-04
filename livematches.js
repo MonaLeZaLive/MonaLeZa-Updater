@@ -7,7 +7,6 @@ import admin from "firebase-admin";
 /* ============================
    Firebase Init
 ============================ */
-
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -21,7 +20,6 @@ const db = admin.database();
 /* ============================
    API Client
 ============================ */
-
 const api = axios.create({
   baseURL: "https://v3.football.api-sports.io",
   headers: {
@@ -30,9 +28,51 @@ const api = axios.create({
 });
 
 /* ============================
+   SAME LEAGUES MAP (IMPORTANT)
+============================ */
+const LEAGUES = {
+  1: "World Cup",
+  2: "UEFA Champions League",
+  3: "UEFA Europa League",
+  6: "Africa Cup of Nations",
+  200: "CAF Champions League",
+  201: "CAF Confederation Cup",
+  202: "CAF Super Cup",
+  17: "AFC Champions League",
+
+  39: "Premier League",
+  45: "FA Cup",
+  48: "EFL Cup",
+  528: "FA Community Shield",
+
+  140: "La Liga",
+  143: "Copa del Rey",
+  556: "Spanish Super Cup",
+
+  135: "Serie A",
+  137: "Coppa Italia",
+  547: "Italian Super Cup",
+
+  78: "Bundesliga",
+  81: "DFB Pokal",
+  529: "German Super Cup",
+
+  61: "Ligue 1",
+  66: "Coupe de France",
+  526: "French Super Cup",
+
+  307: "Saudi Pro League",
+  308: "King's Cup",
+  309: "Saudi Super Cup",
+
+  233: "Egyptian League",
+  714: "Egypt Cup",
+  539: "Egyptian Super Cup",
+};
+
+/* ============================
    Live Update
 ============================ */
-
 (async () => {
   const metaSnap = await db.ref("meta/today").once("value");
   const meta = metaSnap.val();
@@ -44,7 +84,7 @@ const api = axios.create({
 
   const now = dayjs().unix();
 
-  // برا وقت الماتشات → مفيش سحب
+  // خارج وقت الماتشات
   if (now < meta.first_match_ts || now > meta.last_match_ts + 7200) {
     console.log("⏸ Outside matches window");
     process.exit(0);
@@ -63,31 +103,49 @@ const api = axios.create({
     process.exit(0);
   }
 
+  // نجيب الداتا الحالية
+  const todaySnap = await db.ref("matches_today").once("value");
+  const todayData = todaySnap.val();
+
+  if (!todayData) {
+    console.log("❌ matches_today not found");
+    process.exit(0);
+  }
+
   const updates = {};
 
   fixtures.forEach((f) => {
-    const leagueName = f.league.name;
+    const leagueName = LEAGUES[f.league.id];
+    if (!leagueName) return;
 
-    updates[`${leagueName}/matches/${f.fixture.id}`] = {
+    if (!todayData[leagueName]?.matches) return;
+
+    const matchExists = todayData[leagueName].matches.find(
+      (m) => m.id === f.fixture.id
+    );
+
+    if (!matchExists) return;
+
+    updates[
+      `matches_today/${leagueName}/matches/${todayData[leagueName].matches.indexOf(
+        matchExists
+      )}`
+    ] = {
+      ...matchExists,
       status: f.fixture.status.short,
       minute: f.fixture.status.elapsed,
-
-      home_team: f.teams.home.name,
-      home_logo: f.teams.home.logo,
       home_score: f.goals.home,
-
-      away_team: f.teams.away.name,
-      away_logo: f.teams.away.logo,
       away_score: f.goals.away,
-
-      stadium: f.fixture.venue?.name || "",
-      time: dayjs(f.fixture.date).format("HH:mm"),
-      channel: "",
     };
   });
 
-  await db.ref("matches_today").update(updates);
+  if (!Object.keys(updates).length) {
+    console.log("⚪ No relevant live matches to update");
+    process.exit(0);
+  }
 
-  console.log(`🔥 Live matches updated: ${fixtures.length}`);
+  await db.ref().update(updates);
+
+  console.log(`🔥 Live matches updated: ${Object.keys(updates).length}`);
   process.exit(0);
 })();
