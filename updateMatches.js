@@ -30,7 +30,7 @@ const api = axios.create({
 });
 
 /* ============================
-   3️⃣ Leagues Map (ID ➜ Name)
+   3️⃣ Leagues Map (ID ➜ Arabic Name)
 ============================ */
 
 const LEAGUES = {
@@ -96,87 +96,71 @@ async function updateTodayMatches() {
   console.log("📦 Total fixtures:", fixtures.length);
 
   // 🔍 Filter leagues
-  const filtered = fixtures.filter((f) =>
-    LEAGUES[f.league.id]
-  );
-
+  const filtered = fixtures.filter((f) => LEAGUES[f.league.id]);
   console.log("🎯 After league filter:", filtered.length);
 
-  // 🧱 Format matches
-  const matches = filtered.map((f) => ({
-    id: f.fixture.id,
-
-    league: {
-      id: f.league.id,
-      name: f.league.name,
-      ar_name: LEAGUES[f.league.id], // ⭐ الاسم العربي
-      logo: f.league.logo,
-      country: f.league.country,
-    },
-
-    teams: {
-      home: {
-        id: f.teams.home.id,
-        name: f.teams.home.name,
-        logo: f.teams.home.logo,
-      },
-      away: {
-        id: f.teams.away.id,
-        name: f.teams.away.name,
-        logo: f.teams.away.logo,
-      },
-    },
-
-    score: {
-      home: f.goals.home,
-      away: f.goals.away,
-    },
-
-    status: {
-      short: f.fixture.status.short,
-      long: f.fixture.status.long,
-      elapsed: f.fixture.status.elapsed,
-    },
-
-    time: {
-      utc: f.fixture.date,
-      timestamp: f.fixture.timestamp,
-    },
-
-    venue: f.fixture.venue
-      ? {
-          name: f.fixture.venue.name,
-          city: f.fixture.venue.city,
-        }
-      : null,
-  }));
-
   /* ============================
-     5️⃣ Write to Firebase
+     5️⃣ Group matches by league
+     (MATCHES UI STRUCTURE)
   ============================ */
 
-  await db.ref("matches_today").set({
-    date: today,
-    updated_at: new Date().toISOString(),
-    count: matches.length,
-    matches,
+  const grouped = {};
+
+  filtered.forEach((f) => {
+    const leagueName = LEAGUES[f.league.id];
+
+    if (!grouped[leagueName]) {
+      grouped[leagueName] = {
+        league_logo: f.league.logo,
+        matches: {},
+      };
+    }
+
+    grouped[leagueName].matches[f.fixture.id] = {
+      home_team: f.teams.home.name,
+      home_logo: f.teams.home.logo,
+
+      away_team: f.teams.away.name,
+      away_logo: f.teams.away.logo,
+
+      home_score: f.goals.home,
+      away_score: f.goals.away,
+
+      status: f.fixture.status.short,
+      minute: f.fixture.status.elapsed,
+
+      stadium: f.fixture.venue?.name || "",
+      time: dayjs(f.fixture.date).format("HH:mm"),
+      channel: "",
+    };
   });
+
+  /* ============================
+     6️⃣ Write to Firebase
+  ============================ */
+
+  if (Object.keys(grouped).length === 0) {
+    await db.ref("matches_today").set(null);
+    console.log("⚠️ No matches today");
+  } else {
+    await db.ref("matches_today").set(grouped);
+    console.log("✅ Leagues written:", Object.keys(grouped).length);
+  }
 
   await db.ref(`debug/${today}`).set({
     totalFromApi: fixtures.length,
-    afterFilter: matches.length,
+    afterFilter: filtered.length,
+    leagues: Object.keys(grouped),
   });
-
-  console.log("✅ Matches written:", matches.length);
 }
 
 /* ============================
-   6️⃣ Run
+   7️⃣ Run
 ============================ */
 
 updateTodayMatches()
   .then(() => {
-    console.log("🚀 Update completed");
+    console.log("🚀 Update completed successfully");
     process.exit(0);
   })
   .catch((err) => {
