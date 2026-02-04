@@ -187,7 +187,7 @@ grouped[leagueName].matches.push({
    Main
 ============================ */
 (async () => {
-  const today = dayjs();
+  const today = dayjs().tz("Africa/Cairo");
   const yesterday = today.subtract(1, "day").format("YYYY-MM-DD");
   const todayStr = today.format("YYYY-MM-DD");
   const tomorrow = today.add(1, "day").format("YYYY-MM-DD");
