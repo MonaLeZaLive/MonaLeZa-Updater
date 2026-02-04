@@ -4,11 +4,11 @@ import axios from "axios";
 import dayjs from "dayjs";
 import admin from "firebase-admin";
 
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
-
+import utc from "dayjs/plugin/utc.js";
+import timezone from "dayjs/plugin/timezone.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
 
 
 /* ============================
