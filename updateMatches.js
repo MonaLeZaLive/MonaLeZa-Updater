@@ -122,12 +122,15 @@ const LEAGUE_ORDER = [
 ============================ */
 function sortMatches(matches) {
   const priority = { LIVE: 1, NS: 2, FT: 3 };
-  return matches.sort(
-    (a, b) =>
-      priority[a.fixture.status.short] -
-      priority[b.fixture.status.short]
-  );
+
+  return matches.sort((a, b) => {
+    const aStatus = a.status || "NS";
+    const bStatus = b.status || "NS";
+
+    return (priority[aStatus] || 3) - (priority[bStatus] || 3);
+  });
 }
+
 
 async function fetchByDate(date, path) {
   const res = await api.get("/fixtures", {
@@ -147,11 +150,15 @@ async function fetchByDate(date, path) {
       };
     }
 
-    grouped[leagueName].matches.push({
-      id: m.fixture.id,
-      status: m.fixture.status.short,
-      minute: m.fixture.status.elapsed,
-      time: dayjs(m.fixture.date).format("HH:mm"),
+    const statusShort = m.fixture?.status?.short || "NS";
+const elapsed = m.fixture?.status?.elapsed ?? null;
+
+grouped[leagueName].matches.push({
+  id: m.fixture.id,
+  status: statusShort,
+  minute: elapsed,
+  time: dayjs(m.fixture.date).format("HH:mm"),
+
 
       home_team: m.teams.home.name,
       home_logo: m.teams.home.logo,
