@@ -30,124 +30,83 @@ const api = axios.create({
 });
 
 /* ============================
-   3️⃣ Leagues Map (ID ➜ Arabic Name)
+   3️⃣ Leagues (ORDER MATTERS)
 ============================ */
 
-const LEAGUES = {
-  // 🌍 World / Continental
-  1: "كأس العالم",
-  2: "دوري أبطال أوروبا",
-  3: "الدوري الأوروبي",
-  531: "كأس السوبر الأوروبي",
+const LEAGUES_ORDERED = [
+  // International / Major
+  { id: 1, name: "كأس العالم" },
+  { id: 2, name: "دوري أبطال أوروبا" },
+  { id: 3, name: "الدوري الأوروبي" },
+  { id: 6, name: "كأس الأمم الإفريقية" },
+  { id: 15, name: "كأس العالم للأندية" },
 
-  // 🌍 Africa
-  6: "كأس الأمم الإفريقية",
-  200: "دوري أبطال أفريقيا",
-  201: "كأس الكونفدرالية الأفريقية",
-  202: "كأس السوبر الأفريقي",
+  // Africa
+  { id: 200, name: "دوري أبطال أفريقيا" },
+  { id: 201, name: "كأس الكونفدرالية الأفريقية" },
+  { id: 202, name: "كأس السوبر الأفريقي" },
 
-  // 🌍 Asia
-  7: "كأس آسيا",
-  17: "دوري أبطال آسيا",
+  // Asia
+  { id: 17, name: "دوري أبطال آسيا" },
 
-  // 🇬🇧 England
-  39: "الدوري الإنجليزي",
-  45: "كأس الاتحاد الإنجليزي",
-  48: "كأس كاراباو",
-  528: "كأس السوبر الإنجليزي",
+  // England
+  { id: 39, name: "الدوري الإنجليزي" },
+  { id: 45, name: "كأس الاتحاد الإنجليزي" },
+  { id: 48, name: "كأس كاراباو" },
+  { id: 528, name: "كأس السوبر الإنجليزي" },
 
-  // 🇪🇸 Spain
-  140: "الدوري الإسباني",
-  143: "كأس إسبانيا",
-  556: "كأس السوبر الإسباني",
+  // Spain
+  { id: 140, name: "الدوري الإسباني" },
+  { id: 143, name: "كأس إسبانيا" },
+  { id: 556, name: "كأس السوبر الإسباني" },
 
-  // 🇮🇹 Italy
-  135: "الدوري الإيطالي",
-  137: "كأس إيطاليا",
-  547: "كأس السوبر الإيطالي",
+  // Italy
+  { id: 135, name: "الدوري الإيطالي" },
+  { id: 137, name: "كأس إيطاليا" },
+  { id: 547, name: "كأس السوبر الإيطالي" },
 
-  // 🇩🇪 Germany
-  78: "الدوري الألماني",
-  81: "كأس ألمانيا",
-  529: "كأس السوبر الألماني",
+  // Germany
+  { id: 78, name: "الدوري الألماني" },
+  { id: 81, name: "كأس ألمانيا" },
+  { id: 529, name: "كأس السوبر الألماني" },
 
-  // 🇫🇷 France
-  61: "الدوري الفرنسي",
-  66: "كأس فرنسا",
-  526: "كأس السوبر الفرنسي",
+  // France
+  { id: 61, name: "الدوري الفرنسي" },
+  { id: 66, name: "كأس فرنسا" },
+  { id: 526, name: "كأس السوبر الفرنسي" },
 
-  // 🇸🇦 Saudi Arabia
-  307: "الدوري السعودي",
-  308: "كأس خادم الحرمين الشريفين",
-  309: "كأس السوبر السعودي",
+  // Saudi Arabia
+  { id: 307, name: "الدوري السعودي" },
+  { id: 308, name: "كأس خادم الحرمين الشريفين" },
+  { id: 309, name: "كأس السوبر السعودي" },
 
-  // 🇪🇬 Egypt
-  233: "الدوري المصري",
-  714: "كأس مصر",
-  539: "كأس السوبر المصري",
-};
-
-/* ============================
-   4️⃣ Global League Order
-============================ */
-
-const LEAGUE_ORDER = [
-  "كأس العالم",
-  "دوري أبطال أوروبا",
-  "الدوري الأوروبي",
-  "كأس السوبر الأوروبي",
-
-  "كأس الأمم الإفريقية",
-  "دوري أبطال أفريقيا",
-  "كأس الكونفدرالية الأفريقية",
-  "كأس السوبر الأفريقي",
-
-  "كأس آسيا",
-  "دوري أبطال آسيا",
-
-  "الدوري الإنجليزي",
-  "الدوري الإسباني",
-  "الدوري الإيطالي",
-  "الدوري الألماني",
-  "الدوري الفرنسي",
-
-  "الدوري السعودي",
-  "الدوري المصري",
-
-  "كأس الاتحاد الإنجليزي",
-  "كأس كاراباو",
-  "كأس إسبانيا",
-  "كأس إيطاليا",
-  "كأس ألمانيا",
-  "كأس فرنسا",
-
-  "كأس السوبر الإنجليزي",
-  "كأس السوبر الإسباني",
-  "كأس السوبر الإيطالي",
-  "كأس السوبر الألماني",
-  "كأس السوبر الفرنسي",
-
-  "كأس مصر",
-  "كأس خادم الحرمين الشريفين",
-  "كأس السوبر السعودي",
+  // Egypt
+  { id: 233, name: "الدوري المصري" },
+  { id: 714, name: "كأس مصر" },
+  { id: 539, name: "كأس السوبر المصري" },
 ];
 
+// quick lookup
+const LEAGUE_MAP = {};
+LEAGUES_ORDERED.forEach((l) => (LEAGUE_MAP[l.id] = l.name));
+
 /* ============================
-   5️⃣ Helpers
+   4️⃣ Helpers
 ============================ */
 
 function matchPriority(status) {
-  if (["1H", "HT", "2H", "ET", "PEN"].includes(status)) return 1; // Live
-  if (status === "NS") return 2; // Not started
-  return 3; // Finished / Postponed
+  // live first, then not started, then finished
+  if (["1H", "2H", "ET", "P", "LIVE"].includes(status)) return 1;
+  if (status === "NS") return 2;
+  return 3;
 }
 
 /* ============================
-   6️⃣ Core Function
+   5️⃣ Core Function
 ============================ */
 
 async function updateMatchesForDay(type) {
-  const date =
+  let date =
     type === "yesterday"
       ? dayjs().subtract(1, "day")
       : type === "tomorrow"
@@ -155,6 +114,7 @@ async function updateMatchesForDay(type) {
       : dayjs();
 
   const dateStr = date.format("YYYY-MM-DD");
+
   const path =
     type === "yesterday"
       ? "matches_yesterday"
@@ -162,26 +122,40 @@ async function updateMatchesForDay(type) {
       ? "matches_tomorrow"
       : "matches_today";
 
-  console.log(`📅 Fetching ${type} matches for:`, dateStr);
+  console.log(`📅 Fetching ${type} matches for ${dateStr}`);
 
-  const res = await api.get("/fixtures", { params: { date: dateStr } });
+  const res = await api.get("/fixtures", {
+    params: { date: dateStr },
+  });
+
   const fixtures = res.data.response || [];
 
-  const filtered = fixtures.filter((f) => LEAGUES[f.league.id]);
+  const filtered = fixtures.filter((f) => LEAGUE_MAP[f.league.id]);
 
-  const tempMap = {};
+  // لو مفيش ماتشات
+  if (filtered.length === 0) {
+    await db.ref(path).set({
+      date: dateStr,
+      message: "❌ لا توجد مباريات",
+      leagues: {},
+    });
+    console.log(`⚠️ No matches for ${type}`);
+    return;
+  }
+
+  const leaguesData = {};
 
   filtered.forEach((f) => {
-    const leagueName = LEAGUES[f.league.id];
+    const leagueName = LEAGUE_MAP[f.league.id];
 
-    if (!tempMap[leagueName]) {
-      tempMap[leagueName] = {
+    if (!leaguesData[leagueName]) {
+      leaguesData[leagueName] = {
         league_logo: f.league.logo,
         matches: [],
       };
     }
 
-    tempMap[leagueName].matches.push({
+    leaguesData[leagueName].matches.push({
       id: f.fixture.id,
       status: f.fixture.status.short,
       minute: f.fixture.status.elapsed,
@@ -196,39 +170,45 @@ async function updateMatchesForDay(type) {
 
       stadium: f.fixture.venue?.name || "",
       time: dayjs(f.fixture.date).format("HH:mm"),
+      timestamp: f.fixture.timestamp,
       channel: "",
     });
   });
 
-  // 🔥 ترتيب الماتشات داخل كل بطولة
-  Object.values(tempMap).forEach((league) => {
-    league.matches.sort(
-      (a, b) => matchPriority(a.status) - matchPriority(b.status)
-    );
-
-    const obj = {};
-    league.matches.forEach((m) => (obj[m.id] = m));
-    league.matches = obj;
+  // ترتيب الماتشات داخل كل بطولة
+  Object.values(leaguesData).forEach((league) => {
+    league.matches.sort((a, b) => {
+      const pA = matchPriority(a.status);
+      const pB = matchPriority(b.status);
+      if (pA !== pB) return pA - pB;
+      return a.timestamp - b.timestamp;
+    });
   });
 
-  // 🏆 ترتيب البطولات
-  const orderedLeagues = {};
-  LEAGUE_ORDER.forEach((name) => {
-    if (tempMap[name]) orderedLeagues[name] = tempMap[name];
+  // ترتيب البطولات نفسها
+  const orderedResult = {};
+  LEAGUES_ORDERED.forEach((l) => {
+    if (leaguesData[l.name]) {
+      orderedResult[l.name] = leaguesData[l.name];
+    }
   });
 
-  // أي بطولة مش في الليست تتحط في الآخر
-  Object.keys(tempMap).forEach((name) => {
-    if (!orderedLeagues[name]) orderedLeagues[name] = tempMap[name];
+  await db.ref(path).set({
+    date: dateStr,
+    updated_at: new Date().toISOString(),
+    leagues: orderedResult,
   });
 
-  await db.ref(path).set(orderedLeagues);
+  await db.ref(`debug/${dateStr}`).set({
+    totalFromApi: fixtures.length,
+    afterFilter: filtered.length,
+  });
 
-  console.log(`✅ ${type} matches written`);
+  console.log(`✅ ${type} matches saved: ${filtered.length}`);
 }
 
 /* ============================
-   7️⃣ Run
+   6️⃣ Run (once per day)
 ============================ */
 
 (async () => {
@@ -237,7 +217,7 @@ async function updateMatchesForDay(type) {
     await updateMatchesForDay("today");
     await updateMatchesForDay("tomorrow");
 
-    console.log("🚀 All updates completed");
+    console.log("🚀 Daily matches update completed");
     process.exit(0);
   } catch (err) {
     console.error("❌ Error:", err.response?.data || err.message);
