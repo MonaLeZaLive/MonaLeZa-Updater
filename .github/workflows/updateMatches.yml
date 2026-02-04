@@ -1,12 +1,15 @@
 name: Update Football Matches
 
 on:
-  workflow_dispatch:
-  # schedule:
-  #   - cron: "*/15 * * * *"
+  schedule:
+    # 🔹 مرة واحدة يوميًا (بداية اليوم)
+    - cron: "5 0 * * *"
+
+    # 🔴 تحديث اللايف كل 5 دقايق
+    - cron: "*/5 * * * *"
 
 jobs:
-  run-script:
+  update-matches:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,9 +24,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-     
-      - name: Run update script
-        run: node updateMatches.js
+      # 🕛 سحبة بداية اليوم (أمس / اليوم / غد)
+      - name: Update daily matches
+        if: github.event.schedule == '5 0 * * *'
         env:
-           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node updateMatches.js
+
+      # 🔴 تحديث اللايف فقط
+      - name: Update live matches
+        if: github.event.schedule == '*/5 * * * *'
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node livematches.js
