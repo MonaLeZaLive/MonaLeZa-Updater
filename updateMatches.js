@@ -30,15 +30,55 @@ const api = axios.create({
 });
 
 /* ============================
-   3️⃣ Leagues Filter
+   3️⃣ Leagues Map (ID ➜ Name)
 ============================ */
 
-const LEAGUE_IDS = [
-  1, 4, 9, 6, 7,
-  2, 12, 20, 17, 13, 15, 1168,
-  39, 140, 135, 78, 61,
-  233, 307,
-];
+const LEAGUES = {
+  // Egypt
+  233: "الدوري المصري",
+  714: "كأس مصر",
+  539: "كأس السوبر المصري",
+
+  // England
+  39: "الدوري الإنجليزي",
+  45: "كأس الاتحاد الإنجليزي",
+  48: "كأس كاراباو",
+  528: "كأس السوبر الإنجليزي",
+
+  // Spain
+  140: "الدوري الإسباني",
+  143: "كأس إسبانيا",
+  556: "كأس السوبر الإسباني",
+
+  // Italy
+  135: "الدوري الإيطالي",
+  137: "كأس إيطاليا",
+  547: "كأس السوبر الإيطالي",
+
+  // Germany
+  78: "الدوري الألماني",
+  81: "كأس ألمانيا",
+  529: "كأس السوبر الألماني",
+
+  // France
+  61: "الدوري الفرنسي",
+  66: "كأس فرنسا",
+  526: "كأس السوبر الفرنسي",
+
+  // International
+  1: "كأس العالم",
+  2: "دوري أبطال أوروبا",
+  3: "الدوري الأوروبي",
+  4: "كأس أمم أوروبا",
+  5: "دوري الأمم الأوروبية",
+  6: "كأس الأمم الإفريقية",
+  7: "كأس آسيا",
+  9: "كوبا أمريكا",
+  15: "كأس العالم للأندية",
+  22: "الكأس الذهبية",
+  531: "كأس السوبر الأوروبي",
+  480: "الأولمبياد",
+};
 
 /* ============================
    4️⃣ Main Function
@@ -49,9 +89,7 @@ async function updateTodayMatches() {
   console.log("📅 Fetching matches for:", today);
 
   const res = await api.get("/fixtures", {
-    params: {
-      date: today,
-    },
+    params: { date: today },
   });
 
   const fixtures = res.data.response || [];
@@ -59,7 +97,7 @@ async function updateTodayMatches() {
 
   // 🔍 Filter leagues
   const filtered = fixtures.filter((f) =>
-    LEAGUE_IDS.includes(f.league.id)
+    LEAGUES[f.league.id]
   );
 
   console.log("🎯 After league filter:", filtered.length);
@@ -71,6 +109,7 @@ async function updateTodayMatches() {
     league: {
       id: f.league.id,
       name: f.league.name,
+      ar_name: LEAGUES[f.league.id], // ⭐ الاسم العربي
       logo: f.league.logo,
       country: f.league.country,
     },
@@ -116,32 +155,19 @@ async function updateTodayMatches() {
      5️⃣ Write to Firebase
   ============================ */
 
-  if (matches.length === 0) {
-    await db.ref("matches_today").set({
-      date: today,
-      updated_at: new Date().toISOString(),
-      matches: [],
-      message: "❌ لا توجد مباريات اليوم",
-    });
+  await db.ref("matches_today").set({
+    date: today,
+    updated_at: new Date().toISOString(),
+    count: matches.length,
+    matches,
+  });
 
-    console.log("⚠️ No matches written");
-  } else {
-    await db.ref("matches_today").set({
-      date: today,
-      updated_at: new Date().toISOString(),
-      count: matches.length,
-      matches,
-    });
-
-    console.log("✅ Matches written:", matches.length);
-  }
-
-  // 🐞 Debug
   await db.ref(`debug/${today}`).set({
-    fetchedAt: new Date().toISOString(),
     totalFromApi: fixtures.length,
     afterFilter: matches.length,
   });
+
+  console.log("✅ Matches written:", matches.length);
 }
 
 /* ============================
@@ -150,7 +176,7 @@ async function updateTodayMatches() {
 
 updateTodayMatches()
   .then(() => {
-    console.log("🚀 Update completed successfully");
+    console.log("🚀 Update completed");
     process.exit(0);
   })
   .catch((err) => {
