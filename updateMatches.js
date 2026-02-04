@@ -30,7 +30,7 @@ const api = axios.create({
 });
 
 /* ============================
-   3️⃣ Leagues Map
+   3️⃣ Leagues Map (ID ➜ Arabic Name)
 ============================ */
 
 const LEAGUES = {
@@ -65,51 +65,102 @@ const LEAGUES = {
   66: "كأس فرنسا",
   526: "كأس السوبر الفرنسي",
 
-  // International
-  1: "كأس العالم",
-  2: "دوري أبطال أوروبا",
-  3: "الدوري الأوروبي",
-  4: "كأس أمم أوروبا",
-  5: "دوري الأمم الأوروبية",
-  6: "كأس الأمم الإفريقية",
-  7: "كأس آسيا",
-  9: "كوبا أمريكا",
-  15: "كأس العالم للأندية",
-  22: "الكأس الذهبية",
-  531: "كأس السوبر الأوروبي",
-  480: "الأولمبياد",
-
   // Saudi Arabia
   307: "الدوري السعودي",
   308: "كأس خادم الحرمين الشريفين",
   309: "كأس السوبر السعودي",
 
   // Africa
+  6: "كأس الأمم الإفريقية",
   200: "دوري أبطال أفريقيا",
   201: "كأس الكونفدرالية الأفريقية",
   202: "كأس السوبر الأفريقي",
 
   // Asia
+  7: "كأس آسيا",
   17: "دوري أبطال آسيا",
 
+  // International
+  1: "كأس العالم",
+  2: "دوري أبطال أوروبا",
+  3: "الدوري الأوروبي",
+  531: "كأس السوبر الأوروبي",
+  15: "كأس العالم للأندية",
 };
 
 /* ============================
-   4️⃣ Core Function
+   4️⃣ League Display Order
+============================ */
+
+const LEAGUE_ORDER = [
+  "كأس العالم",
+  "دوري أبطال أوروبا",
+  "الدوري الأوروبي",
+  "كأس السوبر الأوروبي",
+  "كأس العالم للأندية",
+
+  "كأس الأمم الإفريقية",
+  "دوري أبطال أفريقيا",
+  "كأس الكونفدرالية الأفريقية",
+  "كأس السوبر الأفريقي",
+
+  "كأس آسيا",
+  "دوري أبطال آسيا",
+
+  "الدوري المصري",
+  "كأس مصر",
+  "كأس السوبر المصري",
+
+  "الدوري السعودي",
+  "كأس خادم الحرمين الشريفين",
+  "كأس السوبر السعودي",
+
+  "الدوري الإنجليزي",
+  "كأس الاتحاد الإنجليزي",
+  "كأس كاراباو",
+  "كأس السوبر الإنجليزي",
+
+  "الدوري الإسباني",
+  "كأس إسبانيا",
+  "كأس السوبر الإسباني",
+
+  "الدوري الإيطالي",
+  "كأس إيطاليا",
+  "كأس السوبر الإيطالي",
+
+  "الدوري الألماني",
+  "كأس ألمانيا",
+  "كأس السوبر الألماني",
+
+  "الدوري الفرنسي",
+  "كأس فرنسا",
+  "كأس السوبر الفرنسي",
+];
+
+/* ============================
+   5️⃣ Match Priority Helper
+============================ */
+
+function matchPriority(status) {
+  if (["1H", "HT", "2H", "ET", "P"].includes(status)) return 1; // LIVE
+  if (status === "NS") return 2; // NOT STARTED
+  return 3; // FINISHED
+}
+
+/* ============================
+   6️⃣ Core Function
 ============================ */
 
 async function updateMatchesForDay(type) {
-  let date;
-
-  if (type === "yesterday") {
-    date = dayjs().subtract(1, "day");
-  } else if (type === "tomorrow") {
-    date = dayjs().add(1, "day");
-  } else {
-    date = dayjs();
-  }
+  const date =
+    type === "yesterday"
+      ? dayjs().subtract(1, "day")
+      : type === "tomorrow"
+      ? dayjs().add(1, "day")
+      : dayjs();
 
   const dateStr = date.format("YYYY-MM-DD");
+
   const path =
     type === "yesterday"
       ? "matches_yesterday"
@@ -124,24 +175,25 @@ async function updateMatchesForDay(type) {
   });
 
   const fixtures = res.data.response || [];
-
   const filtered = fixtures.filter((f) => LEAGUES[f.league.id]);
 
-  const leaguesMap = {};
+  const tempLeagues = {};
 
   filtered.forEach((f) => {
     const leagueName = LEAGUES[f.league.id];
 
-    if (!leaguesMap[leagueName]) {
-      leaguesMap[leagueName] = {
+    if (!tempLeagues[leagueName]) {
+      tempLeagues[leagueName] = {
         league_logo: f.league.logo,
-        matches: {},
+        matches: [],
       };
     }
 
-    leaguesMap[leagueName].matches[f.fixture.id] = {
+    tempLeagues[leagueName].matches.push({
+      id: f.fixture.id,
       status: f.fixture.status.short,
       minute: f.fixture.status.elapsed,
+      priority: matchPriority(f.fixture.status.short),
 
       home_team: f.teams.home.name,
       home_logo: f.teams.home.logo,
@@ -154,10 +206,29 @@ async function updateMatchesForDay(type) {
       stadium: f.fixture.venue?.name || "",
       time: dayjs(f.fixture.date).format("HH:mm"),
       channel: "",
-    };
+    });
   });
 
-  await db.ref(path).set(leaguesMap);
+  const orderedLeagues = {};
+
+  LEAGUE_ORDER.forEach((leagueName) => {
+    if (tempLeagues[leagueName]) {
+      const sortedMatches = tempLeagues[leagueName].matches
+        .sort((a, b) => a.priority - b.priority)
+        .reduce((acc, m) => {
+          acc[m.id] = m;
+          delete acc[m.id].priority;
+          return acc;
+        }, {});
+
+      orderedLeagues[leagueName] = {
+        league_logo: tempLeagues[leagueName].league_logo,
+        matches: sortedMatches,
+      };
+    }
+  });
+
+  await db.ref(path).set(orderedLeagues);
 
   await db.ref(`debug/${dateStr}`).set({
     totalFromApi: fixtures.length,
@@ -168,7 +239,7 @@ async function updateMatchesForDay(type) {
 }
 
 /* ============================
-   5️⃣ Run (once per day)
+   7️⃣ Run
 ============================ */
 
 (async () => {
