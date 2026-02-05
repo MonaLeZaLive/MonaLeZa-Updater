@@ -172,10 +172,12 @@ async function fetchByDate(date, path, label) {
 
   res.data.response.forEach((m) => {
     const league = LEAGUES[m.league.id];
-    if (!league) return;
 
-    const leagueKey = league.en;
-    const leagueName = `${league.ar} | ${league.en}`;
+const leagueKey = league?.en || m.league.name;
+const leagueName = league
+  ? `${league.ar} | ${league.en}`
+  : m.league.name;
+
 
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
@@ -224,17 +226,24 @@ async function fetchByDate(date, path, label) {
   await db.ref(path).set(ordered);
 
   // 🔥 LOG PER DAY
-  console.log(`\n📅 ${label} (${date})`);
-  console.log("━━━━━━━━━━━━━━━━━━━━");
+   console.log("\n======================================");
+  console.log(`📅 ${label} (${date})`);
+  console.log("======================================\n");
 
-  Object.values(logger.leagues).forEach((l) => {
-    console.log(`🏆 ${l.name} (${l.count})`);
-  });
+  LEAGUE_ORDER.forEach((key) => {
+  if (logger.leagues[key]) {
+    const l = logger.leagues[key];
+    console.log(`🏆 ${l.name}`);
+    console.log(`   ↳ Matches: ${l.count}\n`);
+  }
+});
 
-  console.log("━━━━━━━━━━━━━━━━━━━━");
-  console.log(`✅ Total leagues: ${Object.keys(logger.leagues).length}`);
-  console.log(`✅ Total matches: ${logger.totalMatches}\n`);
-}
+
+  console.log("--------------------------------------");
+  console.log(`✅ Total leagues : ${Object.keys(logger.leagues).length}`);
+  console.log(`✅ Total matches : ${logger.totalMatches}`);
+  console.log("======================================\n");
+
 
 
 
