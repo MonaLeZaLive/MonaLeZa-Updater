@@ -153,76 +153,87 @@ function sortMatches(matches) {
 
 
 async function fetchByDate(date, path) {
+  // الطلب الأساسي (كل البطولات العادية)
   const res = await api.get("/fixtures", {
     params: { date },
   });
 
+  // بطولات إفريقيا
+  const africanSeason = getAfricanSeason(date);
+
+  const africanRequests = await Promise.all(
+    AFRICAN_LEAGUES.map((leagueId) =>
+      api.get("/fixtures", {
+        params: {
+          league: leagueId,
+          season: africanSeason,
+        },
+      })
+    )
+  );
+
+  const africanMatches = africanRequests.flatMap((r) =>
+    r.data.response.filter(
+      (m) => dayjs(m.fixture.date).format("YYYY-MM-DD") === date
+    )
+  );
+
+  const allMatches = [
+    ...res.data.response,
+    ...africanMatches,
+  ];
+
   const grouped = {};
 
-  res.data.response.forEach((m) => {
-   const league = LEAGUES[m.league.id];
-if (!league) return;
+  allMatches.forEach((m) => {
+    const league = LEAGUES[m.league.id];
+    if (!league) return;
 
-const leagueKey = String(m.league.id); // للترتيب
-const leagueName = `${league.ar} | ${league.en}`; // للعرض
+    const leagueKey = league.en; // للترتيب
+    const leagueName = `${league.ar} | ${league.en}`; // للعرض
 
-if (!grouped[leagueKey]) {
-  grouped[leagueKey] = {
-  league_id: m.league.id,
-  league_name_ar: league.ar,
-  league_name_en: league.en,
-  league_logo: m.league.logo,
-  matches: [],
-};
-}
+    if (!grouped[leagueKey]) {
+      grouped[leagueKey] = {
+        league_name: leagueName,
+        league_logo: m.league.logo,
+        matches: [],
+      };
+    }
 
-const statusShort = m.fixture?.status?.short || "NS";
-const elapsed = m.fixture?.status?.elapsed ?? null;
+    const statusShort = m.fixture?.status?.short || "NS";
+    const elapsed = m.fixture?.status?.elapsed ?? null;
 
-grouped[leagueKey].matches.push({
-  id: m.fixture.id,
-  status: statusShort,
-  minute: elapsed,
-  time: dayjs(m.fixture.date)
-    .tz("Africa/Cairo")
-    .format("HH:mm"),
+    grouped[leagueKey].matches.push({
+      id: m.fixture.id,
+      status: statusShort,
+      minute: elapsed,
+      time: dayjs(m.fixture.date)
+        .tz("Africa/Cairo")
+        .format("HH:mm"),
 
-  home_team: m.teams.home.name,
-  home_logo: m.teams.home.logo,
-  home_score: m.goals.home,
+      home_team: m.teams.home.name,
+      home_logo: m.teams.home.logo,
+      home_score: m.goals.home,
 
-  away_team: m.teams.away.name,
-  away_logo: m.teams.away.logo,
-  away_score: m.goals.away,
+      away_team: m.teams.away.name,
+      away_logo: m.teams.away.logo,
+      away_score: m.goals.away,
 
-  stadium: m.fixture.venue?.name || "",
-});
-
-
+      stadium: m.fixture.venue?.name || "",
+    });
   });
 
- const ordered = {};
-
-LEAGUE_ORDER.forEach((id) => {
-  const key = String(id);
-  if (grouped[key]) {
-    grouped[key].matches = sortMatches(grouped[key].matches);
-    ordered[key] = grouped[key];
-  }
-});
-
-// أي بطولة ID مش في الترتيب
-Object.keys(grouped).forEach((key) => {
-  if (!ordered[key]) {
-    grouped[key].matches = sortMatches(grouped[key].matches);
-    ordered[key] = grouped[key];
-  }
-});
-
-
+  const ordered = {};
+  LEAGUE_ORDER.forEach((l) => {
+    if (grouped[l]) {
+      grouped[l].matches = sortMatches(grouped[l].matches);
+      ordered[l] = grouped[l];
+    }
+  });
 
   await db.ref(path).set(ordered);
 }
+
 
 /* ============================
    Main
