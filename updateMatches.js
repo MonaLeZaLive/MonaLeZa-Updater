@@ -164,7 +164,6 @@ if (!league) return;
 const leagueKey = league.en; // للترتيب
 const leagueName = `${league.ar} | ${league.en}`; // للعرض
 
-
 if (!grouped[leagueKey]) {
   grouped[leagueKey] = {
     league_name: leagueName,
@@ -173,11 +172,10 @@ if (!grouped[leagueKey]) {
   };
 }
 
-
 const statusShort = m.fixture?.status?.short || "NS";
 const elapsed = m.fixture?.status?.elapsed ?? null;
 
-grouped[leagueName].matches.push({
+grouped[leagueKey].matches.push({
   id: m.fixture.id,
   status: statusShort,
   minute: elapsed,
@@ -195,6 +193,7 @@ grouped[leagueName].matches.push({
 
   stadium: m.fixture.venue?.name || "",
 });
+
 
   });
 
