@@ -180,10 +180,13 @@ async function fetchByDate(date, path, label) {
 
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
-        league_name: leagueName,
-        league_logo: m.league.logo,
-        matches: [],
-      };
+  league_id: m.league.id,
+  league_name_ar: league?.ar || m.league.name,
+  league_name_en: league?.en || m.league.name,
+  league_logo: m.league.logo,
+  matches: [],
+};
+
 
       logger.leagues[leagueKey] = {
         name: leagueName,
