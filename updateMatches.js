@@ -148,39 +148,40 @@ async function fetchByDate(date, path) {
   const grouped = {};
 
   res.data.response.forEach((m) => {
-    const league = LEAGUES[m.league.id];
-    if (!league) return;
+   const league = LEAGUES[m.league.id];
+if (!league) return;
 
-    const leagueKey = league.en;
+const leagueName = `${league.ar} | ${league.en}`;
 
+if (!grouped[leagueName]) {
+  grouped[leagueName] = {
+    league_logo: m.league.logo,
+    matches: [],
+  };
+}
 
-    if (!grouped[leagueName]) {
-      grouped[leagueName] = {
-        league_logo: m.league.logo,
-        matches: [],
-      };
-    }
-
-    const statusShort = m.fixture?.status?.short || "NS";
+const statusShort = m.fixture?.status?.short || "NS";
 const elapsed = m.fixture?.status?.elapsed ?? null;
 
 grouped[leagueName].matches.push({
   id: m.fixture.id,
   status: statusShort,
   minute: elapsed,
-  time: dayjs(m.fixture.date).format("HH:mm"),
+  time: dayjs(m.fixture.date)
+    .tz("Africa/Cairo")
+    .format("HH:mm"),
 
+  home_team: m.teams.home.name,
+  home_logo: m.teams.home.logo,
+  home_score: m.goals.home,
 
-      home_team: m.teams.home.name,
-      home_logo: m.teams.home.logo,
-      home_score: m.goals.home,
+  away_team: m.teams.away.name,
+  away_logo: m.teams.away.logo,
+  away_score: m.goals.away,
 
-      away_team: m.teams.away.name,
-      away_logo: m.teams.away.logo,
-      away_score: m.goals.away,
+  stadium: m.fixture.venue?.name || "",
+});
 
-      stadium: m.fixture.venue?.name || "",
-    });
   });
 
   const ordered = {};
