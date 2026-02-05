@@ -182,12 +182,6 @@ async function fetchByDate(date, path, label) {
   res.data.response.forEach((m) => {
    const league = LEAGUES[m.league.id];
 if (!league) return; // ⛔ فلترة صارمة بالـ ID
-
-const isAfrican = [6, 200, 201, 202].includes(m.league.id);
-const season = getSeasonByDate(date);
-
-if (isAfrican && m.league.season !== season) return;
-
      
 const leagueKey = league.en;
 const leagueName = `${league.ar} | ${league.en}`;
@@ -241,7 +235,7 @@ const leagueName = `${league.ar} | ${league.en}`;
   });
 
   await db.ref(path).set(ordered);
-  return res.data.response;
+  
   /* ====== LOG ====== */
   console.log("\n======================================");
   console.log(`📅 ${label} (${date})`);
@@ -259,6 +253,7 @@ const leagueName = `${league.ar} | ${league.en}`;
   console.log(`✅ Total leagues : ${Object.keys(logger.leagues).length}`);
   console.log(`✅ Total matches : ${logger.totalMatches}`);
   console.log("======================================\n");
+   return res.data.response;
 }
 
 
