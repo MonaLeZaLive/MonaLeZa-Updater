@@ -89,52 +89,51 @@ const LEAGUES = {
 ============================ */
 const LEAGUE_ORDER = [
   // 🌍 International
-  "كأس العالم | World Cup",
-  "دوري أبطال أوروبا | UEFA Champions League",
-  "الدوري الأوروبي | UEFA Europa League",
-  "كأس الأمم الإفريقية | Africa Cup of Nations",
-  "دوري أبطال أفريقيا | CAF Champions League",
-  "كأس الكونفدرالية الأفريقية | CAF Confederation Cup",
-  "كأس السوبر الأفريقي | CAF Super Cup",
-  "دوري أبطال آسيا | AFC Champions League",
+  "World Cup",
+  "UEFA Champions League",
+  "UEFA Europa League",
+  "Africa Cup of Nations",
+  "CAF Champions League",
+  "CAF Confederation Cup",
+  "CAF Super Cup",
+  "AFC Champions League",
 
   // 🇬🇧 England
-  "الدوري الإنجليزي | Premier League",
-  "كأس الاتحاد الإنجليزي | FA Cup",
-  "كأس كاراباو | EFL Cup",
-  "كأس السوبر الإنجليزي | FA Community Shield",
+  "Premier League",
+  "FA Cup",
+  "EFL Cup",
+  "FA Community Shield",
 
   // 🇪🇸 Spain
-  "الدوري الإسباني | La Liga",
-  "كأس إسبانيا | Copa del Rey",
-  "كأس السوبر الإسباني | Spanish Super Cup",
+  "La Liga",
+  "Copa del Rey",
+  "Spanish Super Cup",
 
   // 🇮🇹 Italy
-  "الدوري الإيطالي | Serie A",
-  "كأس إيطاليا | Coppa Italia",
-  "كأس السوبر الإيطالي | Italian Super Cup",
+  "Serie A",
+  "Coppa Italia",
+  "Italian Super Cup",
 
   // 🇩🇪 Germany
-  "الدوري الألماني | Bundesliga",
-  "كأس ألمانيا | DFB Pokal",
-  "كأس السوبر الألماني | German Super Cup",
+  "Bundesliga",
+  "DFB Pokal",
+  "German Super Cup",
 
   // 🇫🇷 France
-  "الدوري الفرنسي | Ligue 1",
-  "كأس فرنسا | Coupe de France",
-  "كأس السوبر الفرنسي | French Super Cup",
+  "Ligue 1",
+  "Coupe de France",
+  "French Super Cup",
 
   // 🇸🇦 Saudi
-  "الدوري السعودي | Saudi Pro League",
-  "كأس خادم الحرمين الشريفين | King's Cup",
-  "كأس السوبر السعودي | Saudi Super Cup",
+  "Saudi Pro League",
+  "King's Cup",
+  "Saudi Super Cup",
 
   // 🇪🇬 Egypt
-  "الدوري المصري | Egyptian League",
-  "كأس مصر | Egypt Cup",
-  "كأس السوبر المصري | Egyptian Super Cup",
+  "Egyptian League",
+  "Egypt Cup",
+  "Egyptian Super Cup",
 ];
-
 
 /* ============================
    Helpers
@@ -162,14 +161,18 @@ async function fetchByDate(date, path) {
    const league = LEAGUES[m.league.id];
 if (!league) return;
 
-const leagueName = `${league.ar} | ${league.en}`;
+const leagueKey = league.en; // للترتيب
+const leagueName = `${league.ar} | ${league.en}`; // للعرض
 
-if (!grouped[leagueName]) {
-  grouped[leagueName] = {
+
+if (!grouped[leagueKey]) {
+  grouped[leagueKey] = {
+    league_name: leagueName,
     league_logo: m.league.logo,
     matches: [],
   };
 }
+
 
 const statusShort = m.fixture?.status?.short || "NS";
 const elapsed = m.fixture?.status?.elapsed ?? null;
@@ -195,13 +198,14 @@ grouped[leagueName].matches.push({
 
   });
 
-  const ordered = {};
-  LEAGUE_ORDER.forEach((l) => {
-    if (grouped[l]) {
-      grouped[l].matches = sortMatches(grouped[l].matches);
-      ordered[l] = grouped[l];
-    }
-  });
+ const ordered = {};
+LEAGUE_ORDER.forEach((l) => {
+  if (grouped[l]) {
+    grouped[l].matches = sortMatches(grouped[l].matches);
+    ordered[l] = grouped[l];
+  }
+});
+
 
   await db.ref(path).set(ordered);
 }
