@@ -163,15 +163,17 @@ async function fetchByDate(date, path) {
    const league = LEAGUES[m.league.id];
 if (!league) return;
 
-const leagueKey = league.en; // للترتيب
+const leagueKey = String(m.league.id); // للترتيب
 const leagueName = `${league.ar} | ${league.en}`; // للعرض
 
 if (!grouped[leagueKey]) {
   grouped[leagueKey] = {
-    league_name: leagueName,
-    league_logo: m.league.logo,
-    matches: [],
-  };
+  league_id: m.league.id,
+  league_name_ar: league.ar,
+  league_name_en: league.en,
+  league_logo: m.league.logo,
+  matches: [],
+};
 }
 
 const statusShort = m.fixture?.status?.short || "NS";
@@ -200,12 +202,23 @@ grouped[leagueKey].matches.push({
   });
 
  const ordered = {};
-LEAGUE_ORDER.forEach((l) => {
-  if (grouped[l]) {
-    grouped[l].matches = sortMatches(grouped[l].matches);
-    ordered[l] = grouped[l];
+
+LEAGUE_ORDER.forEach((id) => {
+  const key = String(id);
+  if (grouped[key]) {
+    grouped[key].matches = sortMatches(grouped[key].matches);
+    ordered[key] = grouped[key];
   }
 });
+
+// أي بطولة ID مش في الترتيب
+Object.keys(grouped).forEach((key) => {
+  if (!ordered[key]) {
+    grouped[key].matches = sortMatches(grouped[key].matches);
+    ordered[key] = grouped[key];
+  }
+});
+
 
 
   await db.ref(path).set(ordered);
