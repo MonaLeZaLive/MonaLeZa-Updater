@@ -151,8 +151,16 @@ function sortMatches(matches) {
   });
 }
 
+function createDailyLogger(date) {
+  return {
+    date,
+    leagues: {},
+    total: 0,
+  };
+}
 
 async function fetchByDate(date, path) {
+  const logger = createDailyLogger(date);
   // الطلب الأساسي (كل البطولات العادية)
   const res = await api.get("/fixtures", {
     params: { date },
@@ -188,6 +196,17 @@ async function fetchByDate(date, path) {
   allMatches.forEach((m) => {
     const league = LEAGUES[m.league.id];
     if (!league) return;
+
+     if (!logger.leagues[league.en]) {
+  logger.leagues[league.en] = {
+    name: `${league.ar} | ${league.en}`,
+    count: 0,
+  };
+}
+
+logger.leagues[league.en].count += 1;
+logger.total += 1;
+
 
     const leagueKey = league.en; // للترتيب
     const leagueName = `${league.ar} | ${league.en}`; // للعرض
@@ -231,6 +250,17 @@ async function fetchByDate(date, path) {
     }
   });
 
+   console.log(`\n📅 ${date}`);
+console.log("━━━━━━━━━━━━━━━━━━━━");
+
+Object.values(logger.leagues).forEach((l) => {
+  console.log(`🏆 ${l.name} (${l.count})`);
+});
+
+console.log("━━━━━━━━━━━━━━━━━━━━");
+console.log(`✅ Total matches: ${logger.total}\n`);
+
+   
   await db.ref(path).set(ordered);
 }
 
