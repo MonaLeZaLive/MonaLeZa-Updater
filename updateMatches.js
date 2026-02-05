@@ -171,12 +171,12 @@ async function fetchByDate(date, path, label) {
   };
 
   res.data.response.forEach((m) => {
-    const league = LEAGUES[m.league.id];
+   const league = LEAGUES[m.league.id];
+if (!league) return; // ⛔ فلترة صارمة بالـ ID
 
-    const leagueKey = league?.en || m.league.name;
-    const leagueName = league
-      ? `${league.ar} | ${league.en}`
-      : m.league.name;
+const leagueKey = league.en;
+const leagueName = `${league.ar} | ${league.en}`;
+
 
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
