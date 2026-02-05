@@ -35,46 +35,54 @@ const api = axios.create({
 });
 
 /* ============================
-   SAME LEAGUES MAP (IMPORTANT)
+   Leagues Map (AR + EN)
 ============================ */
 const LEAGUES = {
-  1: "World Cup",
-  2: "UEFA Champions League",
-  3: "UEFA Europa League",
-  6: "Africa Cup of Nations",
-  200: "CAF Champions League",
-  201: "CAF Confederation Cup",
-  202: "CAF Super Cup",
-  17: "AFC Champions League",
+  // 🌍 International
+  1:  { ar: "كأس العالم", en: "World Cup" },
+  2:  { ar: "دوري أبطال أوروبا", en: "UEFA Champions League" },
+  3:  { ar: "الدوري الأوروبي", en: "UEFA Europa League" },
+  6:  { ar: "كأس الأمم الإفريقية", en: "Africa Cup of Nations" },
+  200:{ ar: "دوري أبطال أفريقيا", en: "CAF Champions League" },
+  201:{ ar: "كأس الكونفدرالية الأفريقية", en: "CAF Confederation Cup" },
+  202:{ ar: "كأس السوبر الأفريقي", en: "CAF Super Cup" },
+  17: { ar: "دوري أبطال آسيا", en: "AFC Champions League" },
 
-  39: "Premier League",
-  45: "FA Cup",
-  48: "EFL Cup",
-  528: "FA Community Shield",
+  // 🇬🇧 England
+  39: { ar: "الدوري الإنجليزي", en: "Premier League" },
+  45: { ar: "كأس الاتحاد الإنجليزي", en: "FA Cup" },
+  48: { ar: "كأس كاراباو", en: "EFL Cup" },
+  528:{ ar: "كأس السوبر الإنجليزي", en: "FA Community Shield" },
 
-  140: "La Liga",
-  143: "Copa del Rey",
-  556: "Spanish Super Cup",
+  // 🇪🇸 Spain
+  140:{ ar: "الدوري الإسباني", en: "La Liga" },
+  143:{ ar: "كأس إسبانيا", en: "Copa del Rey" },
+  556:{ ar: "كأس السوبر الإسباني", en: "Spanish Super Cup" },
 
-  135: "Serie A",
-  137: "Coppa Italia",
-  547: "Italian Super Cup",
+  // 🇮🇹 Italy
+  135:{ ar: "الدوري الإيطالي", en: "Serie A" },
+  137:{ ar: "كأس إيطاليا", en: "Coppa Italia" },
+  547:{ ar: "كأس السوبر الإيطالي", en: "Italian Super Cup" },
 
-  78: "Bundesliga",
-  81: "DFB Pokal",
-  529: "German Super Cup",
+  // 🇩🇪 Germany
+  78: { ar: "الدوري الألماني", en: "Bundesliga" },
+  81: { ar: "كأس ألمانيا", en: "DFB Pokal" },
+  529:{ ar: "كأس السوبر الألماني", en: "German Super Cup" },
 
-  61: "Ligue 1",
-  66: "Coupe de France",
-  526: "French Super Cup",
+  // 🇫🇷 France
+  61: { ar: "الدوري الفرنسي", en: "Ligue 1" },
+  66: { ar: "كأس فرنسا", en: "Coupe de France" },
+  526:{ ar: "كأس السوبر الفرنسي", en: "French Super Cup" },
 
-  307: "Saudi Pro League",
-  308: "King's Cup",
-  309: "Saudi Super Cup",
+  // 🇸🇦 Saudi
+  307:{ ar: "الدوري السعودي", en: "Saudi Pro League" },
+  308:{ ar: "كأس خادم الحرمين الشريفين", en: "King's Cup" },
+  309:{ ar: "كأس السوبر السعودي", en: "Saudi Super Cup" },
 
-  233: "Egyptian League",
-  714: "Egypt Cup",
-  539: "Egyptian Super Cup",
+  // 🇪🇬 Egypt
+  233:{ ar: "الدوري المصري", en: "Egyptian League" },
+  714:{ ar: "كأس مصر", en: "Egypt Cup" },
+  539:{ ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
 };
 
 /* ============================
