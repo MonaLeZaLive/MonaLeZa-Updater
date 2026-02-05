@@ -241,7 +241,7 @@ const leagueName = `${league.ar} | ${league.en}`;
   });
 
   await db.ref(path).set(ordered);
-
+  return res.data.response;
   /* ====== LOG ====== */
   console.log("\n======================================");
   console.log(`📅 ${label} (${date})`);
@@ -292,8 +292,4 @@ if (todayFixtures.length) {
 
   console.log("✅ Update matches done");
   process.exit(0);
-}
- 
-return res.data.response;
-
-)();
+})();
