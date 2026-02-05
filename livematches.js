@@ -42,11 +42,20 @@ const LEAGUES = {
   1:  { ar: "كأس العالم", en: "World Cup" },
   2:  { ar: "دوري أبطال أوروبا", en: "UEFA Champions League" },
   3:  { ar: "الدوري الأوروبي", en: "UEFA Europa League" },
+  4:  { ar: "بطولة أمم أوروبا", en: "Euro Championship" }, 
+  5:  { ar: "دوري الأمم الأوروبية", en: "UEFA Nations League" },
+  9:  { ar: "كوبا أمريكا", en: "Copa America" },
+  848:{ ar: "دوري مؤتمر أمم أوروبا", en: "UEFA Europa Conference League" },
+  36: { ar: "تصفيات كأس أمم أفريقيا", en: "Africa Cup of Nations - Qualification" }, 
   6:  { ar: "كأس الأمم الإفريقية", en: "Africa Cup of Nations" },
-  200:{ ar: "دوري أبطال أفريقيا", en: "CAF Champions League" },
-  201:{ ar: "كأس الكونفدرالية الأفريقية", en: "CAF Confederation Cup" },
-  202:{ ar: "كأس السوبر الأفريقي", en: "CAF Super Cup" },
+  538:{ ar: "كأس الأمم الإفريقية تحت 20 سنة", en: "Africa Cup of Nations U20" },
+  12: { ar: "دوري أبطال أفريقيا", en: "CAF Champions League" },
+  20: { ar: "كأس الكونفدرالية الأفريقية", en: "CAF Confederation Cup" },
+  533:{ ar: "كأس السوبر الأفريقي", en: "CAF Super Cup" },
   17: { ar: "دوري أبطال آسيا", en: "AFC Champions League" },
+  1168: { ar: "كأس القارات للأندية", en: "FIFA Intercontinental Cup" },
+  15: { ar: "كأس العالم للأندية", en: "FIFA Club World Cup" },
+  13: { ar: "كأس ليبرتادوريس ", en: "Copa Libertadores" },
 
   // 🇬🇧 England
   39: { ar: "الدوري الإنجليزي", en: "Premier League" },
@@ -84,6 +93,7 @@ const LEAGUES = {
   714:{ ar: "كأس مصر", en: "Egypt Cup" },
   539:{ ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
 };
+
 
 /* ============================
    Live Update
