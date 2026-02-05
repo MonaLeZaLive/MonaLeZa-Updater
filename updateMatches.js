@@ -159,57 +159,23 @@ function createDailyLogger(date) {
   };
 }
 
-async function fetchByDate(date, path) {
-  const logger = createDailyLogger(date);
-  // الطلب الأساسي (كل البطولات العادية)
+async function fetchByDate(date, path, label) {
   const res = await api.get("/fixtures", {
     params: { date },
   });
 
-  // بطولات إفريقيا
-  const africanSeason = getAfricanSeason(date);
-
-  const africanRequests = await Promise.all(
-    AFRICAN_LEAGUES.map((leagueId) =>
-      api.get("/fixtures", {
-        params: {
-          league: leagueId,
-          season: africanSeason,
-        },
-      })
-    )
-  );
-
-  const africanMatches = africanRequests.flatMap((r) =>
-    r.data.response.filter(
-      (m) => dayjs(m.fixture.date).format("YYYY-MM-DD") === date
-    )
-  );
-
-  const allMatches = [
-    ...res.data.response,
-    ...africanMatches,
-  ];
-
   const grouped = {};
+  const logger = {
+    leagues: {},
+    totalMatches: 0,
+  };
 
-  allMatches.forEach((m) => {
+  res.data.response.forEach((m) => {
     const league = LEAGUES[m.league.id];
     if (!league) return;
 
-     if (!logger.leagues[league.en]) {
-  logger.leagues[league.en] = {
-    name: `${league.ar} | ${league.en}`,
-    count: 0,
-  };
-}
-
-logger.leagues[league.en].count += 1;
-logger.total += 1;
-
-
-    const leagueKey = league.en; // للترتيب
-    const leagueName = `${league.ar} | ${league.en}`; // للعرض
+    const leagueKey = league.en;
+    const leagueName = `${league.ar} | ${league.en}`;
 
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
@@ -217,15 +183,17 @@ logger.total += 1;
         league_logo: m.league.logo,
         matches: [],
       };
-    }
 
-    const statusShort = m.fixture?.status?.short || "NS";
-    const elapsed = m.fixture?.status?.elapsed ?? null;
+      logger.leagues[leagueKey] = {
+        name: leagueName,
+        count: 0,
+      };
+    }
 
     grouped[leagueKey].matches.push({
       id: m.fixture.id,
-      status: statusShort,
-      minute: elapsed,
+      status: m.fixture.status.short || "NS",
+      minute: m.fixture.status.elapsed ?? null,
       time: dayjs(m.fixture.date)
         .tz("Africa/Cairo")
         .format("HH:mm"),
@@ -240,6 +208,9 @@ logger.total += 1;
 
       stadium: m.fixture.venue?.name || "",
     });
+
+    logger.leagues[leagueKey].count += 1;
+    logger.totalMatches += 1;
   });
 
   const ordered = {};
@@ -250,19 +221,21 @@ logger.total += 1;
     }
   });
 
-   console.log(`\n📅 ${date}`);
-console.log("━━━━━━━━━━━━━━━━━━━━");
-
-Object.values(logger.leagues).forEach((l) => {
-  console.log(`🏆 ${l.name} (${l.count})`);
-});
-
-console.log("━━━━━━━━━━━━━━━━━━━━");
-console.log(`✅ Total matches: ${logger.total}\n`);
-
-   
   await db.ref(path).set(ordered);
+
+  // 🔥 LOG PER DAY
+  console.log(`\n📅 ${label} (${date})`);
+  console.log("━━━━━━━━━━━━━━━━━━━━");
+
+  Object.values(logger.leagues).forEach((l) => {
+    console.log(`🏆 ${l.name} (${l.count})`);
+  });
+
+  console.log("━━━━━━━━━━━━━━━━━━━━");
+  console.log(`✅ Total leagues: ${Object.keys(logger.leagues).length}`);
+  console.log(`✅ Total matches: ${logger.totalMatches}\n`);
 }
+
 
 
 /* ============================
@@ -274,14 +247,10 @@ console.log(`✅ Total matches: ${logger.total}\n`);
   const todayStr = today.format("YYYY-MM-DD");
   const tomorrow = today.add(1, "day").format("YYYY-MM-DD");
 
-  console.log("⬅️ Yesterday");
-  await fetchByDate(yesterday, "matches_yesterday");
+  await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+  await fetchByDate(todayStr, "matches_today", "Today");
+  await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-  console.log("📅 Today");
-  await fetchByDate(todayStr, "matches_today");
-
-  console.log("➡️ Tomorrow");
-  await fetchByDate(tomorrow, "matches_tomorrow");
 
   // meta for live updates
   const res = await api.get("/fixtures", { params: { date: todayStr } });
