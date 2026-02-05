@@ -89,51 +89,52 @@ const LEAGUES = {
 ============================ */
 const LEAGUE_ORDER = [
   // 🌍 International
-  "World Cup",
-  "UEFA Champions League",
-  "UEFA Europa League",
-  "Africa Cup of Nations",
-  "CAF Champions League",
-  "CAF Confederation Cup",
-  "CAF Super Cup",
-  "AFC Champions League",
+  "كأس العالم | World Cup",
+  "دوري أبطال أوروبا | UEFA Champions League",
+  "الدوري الأوروبي | UEFA Europa League",
+  "كأس الأمم الإفريقية | Africa Cup of Nations",
+  "دوري أبطال أفريقيا | CAF Champions League",
+  "كأس الكونفدرالية الأفريقية | CAF Confederation Cup",
+  "كأس السوبر الأفريقي | CAF Super Cup",
+  "دوري أبطال آسيا | AFC Champions League",
 
   // 🇬🇧 England
-  "Premier League",
-  "FA Cup",
-  "EFL Cup",
-  "FA Community Shield",
+  "الدوري الإنجليزي | Premier League",
+  "كأس الاتحاد الإنجليزي | FA Cup",
+  "كأس كاراباو | EFL Cup",
+  "كأس السوبر الإنجليزي | FA Community Shield",
 
   // 🇪🇸 Spain
-  "La Liga",
-  "Copa del Rey",
-  "Spanish Super Cup",
+  "الدوري الإسباني | La Liga",
+  "كأس إسبانيا | Copa del Rey",
+  "كأس السوبر الإسباني | Spanish Super Cup",
 
   // 🇮🇹 Italy
-  "Serie A",
-  "Coppa Italia",
-  "Italian Super Cup",
+  "الدوري الإيطالي | Serie A",
+  "كأس إيطاليا | Coppa Italia",
+  "كأس السوبر الإيطالي | Italian Super Cup",
 
   // 🇩🇪 Germany
-  "Bundesliga",
-  "DFB Pokal",
-  "German Super Cup",
+  "الدوري الألماني | Bundesliga",
+  "كأس ألمانيا | DFB Pokal",
+  "كأس السوبر الألماني | German Super Cup",
 
   // 🇫🇷 France
-  "Ligue 1",
-  "Coupe de France",
-  "French Super Cup",
+  "الدوري الفرنسي | Ligue 1",
+  "كأس فرنسا | Coupe de France",
+  "كأس السوبر الفرنسي | French Super Cup",
 
   // 🇸🇦 Saudi
-  "Saudi Pro League",
-  "King's Cup",
-  "Saudi Super Cup",
+  "الدوري السعودي | Saudi Pro League",
+  "كأس خادم الحرمين الشريفين | King's Cup",
+  "كأس السوبر السعودي | Saudi Super Cup",
 
   // 🇪🇬 Egypt
-  "Egyptian League",
-  "Egypt Cup",
-  "Egyptian Super Cup",
+  "الدوري المصري | Egyptian League",
+  "كأس مصر | Egypt Cup",
+  "كأس السوبر المصري | Egyptian Super Cup",
 ];
+
 
 /* ============================
    Helpers
