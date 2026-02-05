@@ -1,12 +1,12 @@
 name: Update Matches
 
 on:
-  schedule:
+ # schedule:
     # بداية اليوم (أمس + اليوم + الغد)
-    - cron: "5 0 * * *"
+   # - cron: "5 0 * * *"
 
     # تحديث اللايف كل 5 دقائق
-    - cron: "*/5 * * * *"
+#    - cron: "*/5 * * * *"
 
   workflow_dispatch:
 
