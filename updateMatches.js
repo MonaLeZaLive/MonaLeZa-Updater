@@ -170,11 +170,7 @@ function getSeasonByDate(date) {
 
 async function fetchByDate(date, path, label) {
   const res = await api.get("/fixtures", {
-    params: {
-  date,
-  season: getSeasonByDate(date),
-}
-
+   params: { date }
   });
 
   const grouped = {};
@@ -187,6 +183,12 @@ async function fetchByDate(date, path, label) {
    const league = LEAGUES[m.league.id];
 if (!league) return; // ⛔ فلترة صارمة بالـ ID
 
+const isAfrican = [6, 200, 201, 202].includes(m.league.id);
+const season = getSeasonByDate(date);
+
+if (isAfrican && m.league.season !== season) return;
+
+     
 const leagueKey = league.en;
 const leagueName = `${league.ar} | ${league.en}`;
 
@@ -270,28 +272,28 @@ const leagueName = `${league.ar} | ${league.en}`;
   const todayStr = today.format("YYYY-MM-DD");
   const tomorrow = today.add(1, "day").format("YYYY-MM-DD");
 
-  await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
-  await fetchByDate(todayStr, "matches_today", "Today");
-  await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
+  const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
+if (todayFixtures.length) {
+  const times = todayFixtures.map((f) =>
+    dayjs(f.fixture.date).unix()
+  );
 
-  // meta for live updates
-  const res = await api.get("/fixtures", { params: { date: todayStr } });
-  const fixtures = res.data.response;
+  await db.ref("meta/today").set({
+    date: todayStr,
+    first_match_ts: Math.min(...times),
+    last_match_ts: Math.max(...times),
+    updated_at: new Date().toISOString(),
+  });
+}
 
-  if (fixtures.length) {
-    const times = fixtures.map((f) =>
-      dayjs(f.fixture.date).unix()
-    );
-
-    await db.ref("meta/today").set({
-      date: todayStr,
-      first_match_ts: Math.min(...times),
-      last_match_ts: Math.max(...times),
-      updated_at: new Date().toISOString(),
-    });
-  }
 
   console.log("✅ Update matches done");
   process.exit(0);
-})();
+}
+ 
+return res.data.response;
+
+)();
