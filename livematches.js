@@ -123,8 +123,11 @@ const LEAGUES = {
   const updates = {};
 
   fixtures.forEach((f) => {
-    const leagueName = LEAGUES[f.league.id];
-    if (!leagueName) return;
+    const league = LEAGUES[f.league.id];
+    if (!league) return;
+
+    const leagueName = `${league.ar} | ${league.en}`;
+    ;
 
     if (!todayData[leagueName]?.matches) return;
 
