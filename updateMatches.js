@@ -159,9 +159,22 @@ function createDailyLogger(date) {
   };
 }
 
+function getSeasonByDate(date) {
+  const year = dayjs(date).year();
+  const month = dayjs(date).month() + 1;
+
+  // بطولات أفريقيا غالبًا موسمها يبدأ من أغسطس
+  return month >= 8 ? year : year - 1;
+}
+
+
 async function fetchByDate(date, path, label) {
   const res = await api.get("/fixtures", {
-    params: { date },
+    params: {
+  date,
+  season: getSeasonByDate(date),
+}
+
   });
 
   const grouped = {};
