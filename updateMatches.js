@@ -56,6 +56,7 @@ const LEAGUES = {
   15: { ar: "كأس العالم للأندية", en: "FIFA Club World Cup" },
   13: { ar: "كأس ليبرتادوريس ", en: "Copa Libertadores" },
   200:{ ar: "بطولة الدوري الإفريقي", en: "African Football League" },
+  7:  { ar: "كأس آسيا للمنتخبات", en: "AFC Asian Cup" },
 
   // 🇬🇧 England
   39: { ar: "الدوري الإنجليزي", en: "Premier League" },
@@ -98,64 +99,58 @@ const LEAGUES = {
    League Order (FIXED)
 ============================ */
 const LEAGUE_ORDER = [
-  // 🌍 International
+  /* 🌍 National Teams */
   "World Cup",
-  "UEFA Champions League",
-  "UEFA Europa League",
-  "Euro Championship",
+  "FIFA Club World Cup",
+  "FIFA Intercontinental Cup", 
+  "Euro Championship", 
   "UEFA Nations League", 
-  "Copa America",
-  "UEFA Europa Conference League",
+  "Copa America", 
   "Africa Cup of Nations - Qualification", 
-  "Africa Cup of Nations",
-  "Africa Cup of Nations U20", 
-  "CAF Champions League",
-  "CAF Confederation Cup",
-  "CAF Super Cup",
-  "AFC Champions League",
-  "FIFA Intercontinental Cup",
-  "FIFA Club World Cup", 
-  "Copa Libertadores", 
-  "African Football League", 
+  "Africa Cup of Nations", 
+  "AFC Asian Cup", 
+  "Africa Cup of Nations U20",  
 
-  // 🇬🇧 England
+  /* 🌍 Continental / International Leagues */
+  "UEFA Champions League",
+  "CAF Champions League",
+  "AFC Champions League",
+  "Copa Libertadores", 
+  "UEFA Europa League",
+  "CAF Confederation Cup",
+  "UEFA Europa Conference League", 
+  "African Football League",
+
+  /* 🏆 Leagues (Domestic) */
   "Premier League",
+  "La Liga",
+  "Serie A",
+  "Bundesliga",
+  "Ligue 1",
+  "Egyptian League", 
+  "Saudi Pro League",
+   
+  /* 🏆 Cups */
   "FA Cup",
   "EFL Cup",
-  "FA Community Shield",
-
-  // 🇪🇸 Spain
-  "La Liga",
   "Copa del Rey",
-  "Spanish Super Cup",
-
-  // 🇮🇹 Italy
-  "Serie A",
   "Coppa Italia",
-  "Italian Super Cup",
-
-  // 🇩🇪 Germany
-  "Bundesliga",
   "DFB Pokal",
-  "German Super Cup",
-
-  // 🇫🇷 France
-  "Ligue 1",
   "Coupe de France",
-  "French Super Cup",
-
-  // 🇸🇦 Saudi
-  "Saudi Pro League",
+  "Egypt Cup",
   "King's Cup",
+   
+  /* 🛡 Super Cups */ 
+  "CAF Super Cup", 
+  "FA Community Shield",
+  "Spanish Super Cup",
+  "Italian Super Cup",
+  "German Super Cup",
+  "French Super Cup",
+  "Egyptian Super Cup",
   "Saudi Super Cup",
 
-  // 🇪🇬 Egypt
-  "Egyptian League",
-  "Egypt Cup",
-  "Egyptian Super Cup",
 ];
-
-
 
 /* ============================
    Helpers
