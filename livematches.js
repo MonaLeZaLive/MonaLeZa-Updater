@@ -56,6 +56,7 @@ const LEAGUES = {
   1168: { ar: "كأس القارات للأندية", en: "FIFA Intercontinental Cup" },
   15: { ar: "كأس العالم للأندية", en: "FIFA Club World Cup" },
   13: { ar: "كأس ليبرتادوريس ", en: "Copa Libertadores" },
+  200:{ ar: "بطولة الدوري الإفريقي", en: "African Football League" }, 
 
   // 🇬🇧 England
   39: { ar: "الدوري الإنجليزي", en: "Premier League" },
