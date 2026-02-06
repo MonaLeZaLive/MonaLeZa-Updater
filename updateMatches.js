@@ -271,35 +271,99 @@ const leagueName = `${league.ar} | ${league.en}`;
    return res.data.response;
 }
 
+async function shouldRunNow() {
+  const snap = await db.ref("meta/today").once("value");
+  const meta = snap.val();
 
+  if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
+    console.log("⚠️ No meta found → allow run");
+    return true; // أول اليوم لازم يرن
+  }
+
+  const nowTs = dayjs().unix();
+
+  // قبل أول ماتش بساعة
+  if (nowTs < meta.first_match_ts - 3600) {
+    console.log("⏳ Too early before first match → skip");
+    return false;
+  }
+
+  // بعد آخر ماتش بساعة
+  if (nowTs > meta.last_match_ts + 3600) {
+    console.log("🏁 All matches finished → skip");
+    return false;
+  }
+
+  console.log("🔥 Within match window → allow run");
+  return true;
+}
 
 /* ============================
    Main
 ============================ */
 (async () => {
-  const today = dayjs().tz("Africa/Cairo");
-  const yesterday = today.subtract(1, "day").format("YYYY-MM-DD");
-  const todayStr = today.format("YYYY-MM-DD");
-  const tomorrow = today.add(1, "day").format("YYYY-MM-DD");
 
-  const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
-await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
-await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
+  const now = dayjs().tz("Africa/Cairo");
+  const hour = now.hour();
+  const minute = now.minute();
 
-if (todayFixtures.length) {
-  const times = todayFixtures.map((f) =>
-    dayjs(f.fixture.date).unix()
-  );
+  const todayStr = now.format("YYYY-MM-DD");
+  const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
+  const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
-  await db.ref("meta/today").set({
-    date: todayStr,
-    first_match_ts: Math.min(...times),
-    last_match_ts: Math.max(...times),
-    updated_at: new Date().toISOString(),
-  });
-}
+  // 🕛 تشغيل بداية اليوم (00:05 فقط)
+  if (hour === 0 && minute <= 10) {
+    console.log("🌅 Midnight full update");
 
+    const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+    await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+    await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-  console.log("✅ Update matches done");
+    if (todayFixtures.length) {
+      const times = todayFixtures.map(f =>
+        dayjs(f.fixture.date).unix()
+      );
+
+      await db.ref("meta/today").set({
+        date: todayStr,
+        first_match_ts: Math.min(...times),
+        last_match_ts: Math.max(...times),
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    console.log("✅ Midnight update done");
+    process.exit(0);
+  }
+
+  // 🔎 باقي اليوم → نشوف هل نرن ولا لا
+  const snap = await db.ref("meta/today").once("value");
+  const meta = snap.val();
+
+  if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
+    console.log("⚠️ No meta → skipping");
+    process.exit(0);
+  }
+
+  const nowTs = now.unix();
+
+  // قبل أول ماتش بساعة
+  if (nowTs < meta.first_match_ts - 3600) {
+    console.log("⏳ Too early → skip");
+    process.exit(0);
+  }
+
+  // بعد آخر ماتش بنص ساعة فقط (1800 ثانية)
+  if (nowTs > meta.last_match_ts + 1800) {
+    console.log("🏁 All matches finished → skip");
+    process.exit(0);
+  }
+
+  console.log("🔥 Live window → updating today only");
+
+  await fetchByDate(todayStr, "matches_today", "Today");
+
+  console.log("✅ Live update done");
   process.exit(0);
 })();
+
