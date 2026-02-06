@@ -1,12 +1,12 @@
 name: Update Matches
 
 on:
- # schedule:
-    # بداية اليوم (أمس + اليوم + الغد)
-   # - cron: "5 0 * * *"
+  schedule:
+    # 🕛 أول اليوم 00:05 (يسحب أمس + اليوم + الغد)
+    - cron: "5 0 * * *"
 
-    # تحديث اللايف كل 5 دقائق
-#    - cron: "*/5 * * * *"
+    # ⏱️ كل 10 دقائق (السكريبت هو اللي يقرر يضرب API ولا لأ)
+    - cron: "*/10 * * * *"
 
   workflow_dispatch:
 
@@ -31,4 +31,3 @@ jobs:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node updateMatches.js
-
