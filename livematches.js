@@ -56,7 +56,8 @@ const LEAGUES = {
   1168: { ar: "كأس القارات للأندية", en: "FIFA Intercontinental Cup" },
   15: { ar: "كأس العالم للأندية", en: "FIFA Club World Cup" },
   13: { ar: "كأس ليبرتادوريس ", en: "Copa Libertadores" },
-  200:{ ar: "بطولة الدوري الإفريقي", en: "African Football League" }, 
+  200:{ ar: "بطولة الدوري الإفريقي", en: "African Football League" },
+  7:  { ar: "كأس آسيا للمنتخبات", en: "AFC Asian Cup" },
 
   // 🇬🇧 England
   39: { ar: "الدوري الإنجليزي", en: "Premier League" },
@@ -94,6 +95,7 @@ const LEAGUES = {
   714:{ ar: "كأس مصر", en: "Egypt Cup" },
   539:{ ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
 };
+
 
 
 /* ============================
