@@ -275,12 +275,18 @@ async function shouldRunNow() {
   const snap = await db.ref("meta/today").once("value");
   const meta = snap.val();
 
+ 
+
   if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
     console.log("⚠️ No meta found → allow run");
     return true;
   }
 
   const nowTs = dayjs().utc().unix();
+
+     console.log("nowTs:", nowTs, "=>", dayjs.unix(nowTs).utc().format());
+console.log("first:", meta.first_match_ts, "=>", dayjs.unix(meta.first_match_ts).utc().format());
+console.log("last :", meta.last_match_ts, "=>", dayjs.unix(meta.last_match_ts).utc().format());
 
 
   if (nowTs < meta.first_match_ts - 600) {
