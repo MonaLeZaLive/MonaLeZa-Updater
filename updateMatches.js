@@ -280,14 +280,15 @@ async function shouldRunNow() {
     return true;
   }
 
-  const nowTs = dayjs().tz("Africa/Cairo").unix();
+  const nowTs = dayjs().utc().unix();
 
-  if (nowTs < meta.first_match_ts - 3600) {
+
+  if (nowTs < meta.first_match_ts - 600) {
     console.log("⏳ Too early before first match → skip");
     return false;
   }
 
-  if (nowTs > meta.last_match_ts + 1800) {
+  if (nowTs > meta.last_match_ts + 600) {
     console.log("🏁 All matches finished → skip");
     return false;
   }
@@ -302,11 +303,12 @@ async function shouldRunNow() {
 ============================ */
 (async () => {
 
-  const now = dayjs().tz("Africa/Cairo");
+  const now = dayjs().utc();
 
-  const todayStr = now.format("YYYY-MM-DD");
-  const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
-  const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
+const todayStr = now.format("YYYY-MM-DD");
+const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
+const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
+
 
   const snap = await db.ref("meta/today").once("value");
   const meta = snap.val();
@@ -320,17 +322,18 @@ async function shouldRunNow() {
     await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
     if (todayFixtures.length) {
-      const times = todayFixtures.map(f =>
-        dayjs(f.fixture.date).unix()
-      );
+  const times = todayFixtures.map(f => f.fixture.timestamp);
 
-      await db.ref("meta/today").set({
-        date: todayStr,
-        first_match_ts: Math.min(...times),
-        last_match_ts: Math.max(...times),
-        updated_at: new Date().toISOString(),
-      });
-    }
+  if (times.length) {
+    await db.ref("meta/today").set({
+      date: todayStr,
+      first_match_ts: Math.min(...times),
+      last_match_ts: Math.max(...times),
+      updated_at: new Date().toISOString(),
+    });
+  }
+}
+
 
     console.log("✅ First daily update done");
     process.exit(0);
