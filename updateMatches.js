@@ -320,7 +320,10 @@ const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
   const meta = snap.val();
 
   // 🌅 أول تشغيل في اليوم
-    if (!meta || meta.date !== todayStr) {
+const isBadMeta = meta?.first_match_ts && (meta.first_match_ts % 86400) === 0;
+
+if (!meta || meta.date !== todayStr || isBadMeta) {
+  if (isBadMeta) console.log("🧹 Bad meta (00:00Z) → rebuilding meta");
     console.log("🌅 First run of the day → full update");
 
     const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
