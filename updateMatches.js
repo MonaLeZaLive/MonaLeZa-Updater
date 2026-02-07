@@ -320,7 +320,7 @@ const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
   const meta = snap.val();
 
   // 🌅 أول تشغيل في اليوم
-  if (!meta || meta.date !== todayStr) {
+    if (!meta || meta.date !== todayStr) {
     console.log("🌅 First run of the day → full update");
 
     const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
@@ -328,27 +328,28 @@ const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
     await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
     if (todayFixtures.length) {
-  const times = todayFixtures
-  .map(f => f.fixture.timestamp)
-  .filter(ts => ts && (ts % 86400) !== 0); // استبعاد 00:00 UTC
+      const times = todayFixtures
+        .map(f => f.fixture.timestamp)
+        .filter(ts => ts && (ts % 86400) !== 0); // استبعاد 00:00 UTC
 
-
-  if (times.length) {
-  await db.ref("meta/today").set({
-    date: todayStr,
-    first_match_ts: Math.min(...times),
-    last_match_ts: Math.max(...times),
-    updated_at: new Date().toISOString(),
-  });
-} else {
-  console.log("⚠️ No valid fixtures after filtering 00:00 placeholders");
-}
-
-
+      if (times.length) {
+        await db.ref("meta/today").set({
+          date: todayStr,
+          first_match_ts: Math.min(...times),
+          last_match_ts: Math.max(...times),
+          updated_at: new Date().toISOString(),
+        });
+      } else {
+        console.log("⚠️ No valid fixtures after filtering 00:00 placeholders");
+      }
+    } else {
+      console.log("⚠️ No fixtures today");
+    }
 
     console.log("✅ First daily update done");
     process.exit(0);
   }
+
 
   // 🔎 باقي اليوم → نستخدم shouldRunNow
   const allowed = await shouldRunNow();
