@@ -2,8 +2,9 @@ name: Update Matches
 
 on:
   schedule:
-    # كل 10 دقائق طوال اليوم بتوقيت القاهرة
-    - cron: "0-59/10 22-23,0-21 * * *" # UTC → Cairo +2
+    
+  - cron: "*/10 * * * *"
+ # UTC → Cairo +2
 
   workflow_dispatch:
 
