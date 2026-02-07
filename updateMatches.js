@@ -218,24 +218,29 @@ const leagueName = `${league.ar} | ${league.en}`;
       };
     }
 
-    grouped[leagueKey].matches.push({
-      id: m.fixture.id,
-      status: m.fixture.status.short || "NS",
-      minute: m.fixture.status.elapsed ?? null,
-      time: dayjs(m.fixture.date)
-        .tz("Africa/Cairo")
-        .format("HH:mm"),
+    const ts = m.fixture.timestamp; // UTC
 
-      home_team: m.teams.home.name,
-      home_logo: m.teams.home.logo,
-      home_score: m.goals.home,
+grouped[leagueKey].matches.push({
+  id: m.fixture.id,
+  ts, // ✅ مهم
 
-      away_team: m.teams.away.name,
-      away_logo: m.teams.away.logo,
-      away_score: m.goals.away,
+  status: m.fixture.status.short || "NS",
+  minute: m.fixture.status.elapsed ?? null,
 
-      stadium: m.fixture.venue?.name || "",
-    });
+  // عرض فقط
+  time: dayjs.unix(ts).tz("Africa/Cairo").format("HH:mm"),
+
+  home_team: m.teams.home.name,
+  home_logo: m.teams.home.logo,
+  home_score: m.goals.home,
+
+  away_team: m.teams.away.name,
+  away_logo: m.teams.away.logo,
+  away_score: m.goals.away,
+
+  stadium: m.fixture.venue?.name || "",
+});
+
 
     logger.leagues[leagueKey].count += 1;
     logger.totalMatches += 1;
@@ -269,6 +274,31 @@ const leagueName = `${league.ar} | ${league.en}`;
   console.log(`✅ Total matches : ${logger.totalMatches}`);
   console.log("======================================\n");
    return res.data.response;
+}
+
+ async function buildMetaFromFirebaseToday(todayStr) {
+  const snap = await db.ref("matches_today").once("value");
+  const data = snap.val();
+
+  if (!data) return null;
+
+  const times = [];
+
+  Object.values(data).forEach((leagueObj) => {
+    if (!leagueObj?.matches) return;
+    leagueObj.matches.forEach((m) => {
+      if (m?.ts) times.push(m.ts);
+    });
+  });
+
+  if (!times.length) return null;
+
+  return {
+    date: todayStr,
+    first_match_ts: Math.min(...times),
+    last_match_ts: Math.max(...times),
+    updated_at: new Date().toISOString(),
+  };
 }
 
 async function shouldRunNow() {
@@ -308,53 +338,37 @@ console.log("last :", meta.last_match_ts, "=>", dayjs.unix(meta.last_match_ts).u
    Main
 ============================ */
 (async () => {
-
   const now = dayjs().utc();
 
-const todayStr = now.format("YYYY-MM-DD");
-const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
-const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
-
+  const todayStr = now.format("YYYY-MM-DD");
+  const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
+  const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
   const snap = await db.ref("meta/today").once("value");
   const meta = snap.val();
 
-  // 🌅 أول تشغيل في اليوم
-const isBadMeta = meta?.first_match_ts && (meta.first_match_ts % 86400) === 0;
-
-if (!meta || meta.date !== todayStr || isBadMeta) {
-  if (isBadMeta) console.log("🧹 Bad meta (00:00Z) → rebuilding meta");
+  // 🌅 أول تشغيل في اليوم → اسحب 3 أيام وابني meta من Firebase
+  if (!meta || meta.date !== todayStr) {
     console.log("🌅 First run of the day → full update");
 
-    const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+    await fetchByDate(todayStr, "matches_today", "Today");
     await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
     await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-    if (todayFixtures.length) {
-      const times = todayFixtures
-        .map(f => f.fixture.timestamp)
-        .filter(ts => ts && (ts % 86400) !== 0); // استبعاد 00:00 UTC
+    const metaFromFb = await buildMetaFromFirebaseToday(todayStr);
 
-      if (times.length) {
-        await db.ref("meta/today").set({
-          date: todayStr,
-          first_match_ts: Math.min(...times),
-          last_match_ts: Math.max(...times),
-          updated_at: new Date().toISOString(),
-        });
-      } else {
-        console.log("⚠️ No valid fixtures after filtering 00:00 placeholders");
-      }
+    if (metaFromFb) {
+      await db.ref("meta/today").set(metaFromFb);
+      console.log("✅ meta/today built from Firebase matches_today");
     } else {
-      console.log("⚠️ No fixtures today");
+      console.log("⚠️ Could not build meta/today from Firebase (no ts found)");
     }
 
     console.log("✅ First daily update done");
     process.exit(0);
   }
 
-
-  // 🔎 باقي اليوم → نستخدم shouldRunNow
+  // باقي اليوم → اقرأ meta وقرر
   const allowed = await shouldRunNow();
 
   if (!allowed) {
@@ -363,10 +377,8 @@ if (!meta || meta.date !== todayStr || isBadMeta) {
   }
 
   console.log("🔥 Live window → updating today only");
-
   await fetchByDate(todayStr, "matches_today", "Today");
 
   console.log("✅ Live update done");
   process.exit(0);
-
 })();
