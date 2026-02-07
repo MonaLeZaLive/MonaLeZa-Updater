@@ -328,17 +328,22 @@ const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
     await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
     if (todayFixtures.length) {
-  const times = todayFixtures.map(f => f.fixture.timestamp);
+  const times = todayFixtures
+  .map(f => f.fixture.timestamp)
+  .filter(ts => ts && (ts % 86400) !== 0); // استبعاد 00:00 UTC
+
 
   if (times.length) {
-    await db.ref("meta/today").set({
-      date: todayStr,
-      first_match_ts: Math.min(...times),
-      last_match_ts: Math.max(...times),
-      updated_at: new Date().toISOString(),
-    });
-  }
+  await db.ref("meta/today").set({
+    date: todayStr,
+    first_match_ts: Math.min(...times),
+    last_match_ts: Math.max(...times),
+    updated_at: new Date().toISOString(),
+  });
+} else {
+  console.log("⚠️ No valid fixtures after filtering 00:00 placeholders");
 }
+
 
 
     console.log("✅ First daily update done");
