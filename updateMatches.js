@@ -277,19 +277,17 @@ async function shouldRunNow() {
 
   if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
     console.log("⚠️ No meta found → allow run");
-    return true; // أول اليوم لازم يرن
+    return true;
   }
 
-  const nowTs = dayjs().unix();
+  const nowTs = dayjs().tz("Africa/Cairo").unix();
 
-  // قبل أول ماتش بساعة
   if (nowTs < meta.first_match_ts - 3600) {
     console.log("⏳ Too early before first match → skip");
     return false;
   }
 
-  // بعد آخر ماتش بساعة
-  if (nowTs > meta.last_match_ts + 3600) {
+  if (nowTs > meta.last_match_ts + 1800) {
     console.log("🏁 All matches finished → skip");
     return false;
   }
@@ -298,22 +296,24 @@ async function shouldRunNow() {
   return true;
 }
 
+
 /* ============================
    Main
 ============================ */
 (async () => {
 
   const now = dayjs().tz("Africa/Cairo");
-  const hour = now.hour();
-  const minute = now.minute();
 
   const todayStr = now.format("YYYY-MM-DD");
   const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
   const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
-  // 🕛 تشغيل بداية اليوم (00:05 فقط)
-  if (hour === 0 && minute <= 10) {
-    console.log("🌅 Midnight full update");
+  const snap = await db.ref("meta/today").once("value");
+  const meta = snap.val();
+
+  // 🌅 أول تشغيل في اليوم
+  if (!meta || meta.date !== todayStr) {
+    console.log("🌅 First run of the day → full update");
 
     const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
     await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
@@ -332,30 +332,15 @@ async function shouldRunNow() {
       });
     }
 
-    console.log("✅ Midnight update done");
+    console.log("✅ First daily update done");
     process.exit(0);
   }
 
-  // 🔎 باقي اليوم → نشوف هل نرن ولا لا
-  const snap = await db.ref("meta/today").once("value");
-  const meta = snap.val();
+  // 🔎 باقي اليوم → نستخدم shouldRunNow
+  const allowed = await shouldRunNow();
 
-  if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
-    console.log("⚠️ No meta → skipping");
-    process.exit(0);
-  }
-
-  const nowTs = now.unix();
-
-  // قبل أول ماتش بساعة
-  if (nowTs < meta.first_match_ts - 3600) {
-    console.log("⏳ Too early → skip");
-    process.exit(0);
-  }
-
-  // بعد آخر ماتش بنص ساعة فقط (1800 ثانية)
-  if (nowTs > meta.last_match_ts + 1800) {
-    console.log("🏁 All matches finished → skip");
+  if (!allowed) {
+    console.log("🚫 Outside match window → skip");
     process.exit(0);
   }
 
@@ -365,5 +350,5 @@ async function shouldRunNow() {
 
   console.log("✅ Live update done");
   process.exit(0);
-})();
 
+})();
