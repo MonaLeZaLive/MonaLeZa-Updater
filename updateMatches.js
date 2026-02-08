@@ -1,17 +1,18 @@
+/* ====== علشان تعمل Request للـ API Football ====== */
 import axios from "axios";
+/* ====== علشان تتعامل مع التواريخ والأوقات بسهولة ====== */
 import dayjs from "dayjs";
+/* ====== علشان تكتب الداتا في Firebase Realtime Database من سيرفر (GitHub Actions) ====== */
 import admin from "firebase-admin";
-
+/* ====== علشان dayjs يعرف يحول الوقت ويشتغل على توقيت مصر ====== */
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
-
+/* ====== تفعيل الـ plugins ====== */
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-
-
 /* ============================
-   Firebase Init
+   تهيئة ال Firebase Admin
 ============================ */
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
@@ -22,9 +23,11 @@ admin.initializeApp({
 });
 
 const db = admin.database();
-
 /* ============================
-   API Init
+   نهاية تهيئة ال Firebase Admin
+============================ */
+/* ============================
+      تهيئة ال API Football
 ============================ */
 const api = axios.create({
   baseURL: "https://v3.football.api-sports.io",
@@ -32,9 +35,11 @@ const api = axios.create({
     "x-apisports-key": process.env.API_FOOTBALL_KEY,
   },
 });
-
 /* ============================
-   Leagues Map (AR + EN)
+     نهاية تهيئة ال API Football
+============================ */
+/* ============================
+     خريطة البطولات LEAGUES
 ============================ */
 const LEAGUES = {
   // 🌍 International
@@ -94,9 +99,11 @@ const LEAGUES = {
   714:{ ar: "كأس مصر", en: "Egypt Cup" },
   539:{ ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
 };
-
 /* ============================
-   League Order (FIXED)
+    نهاية خريطة البطولات LEAGUES
+============================ */
+/* ============================
+ ترتيب عرض البطولات LEAGUE_ORDER
 ============================ */
 const LEAGUE_ORDER = [
   /* 🌍 National Teams */
@@ -151,10 +158,12 @@ const LEAGUE_ORDER = [
   "Saudi Super Cup",
 
 ];
-
 /* ============================
-   Helpers
+نهاية ترتيب عرض البطولات LEAGUE_ORDER
 ============================ */
+
+/* ====== ترتيب الماتشات جوّه كل بطولة ====== */
+
 function sortMatches(matches) {
   const priority = { LIVE: 1, NS: 2, FT: 3 };
 
@@ -166,23 +175,10 @@ function sortMatches(matches) {
   });
 }
 
-function createDailyLogger(date) {
-  return {
-    date,
-    leagues: {},
-    total: 0,
-  };
-}
+/* ====== نهاية ترتيب الماتشات جوّه كل بطولة ====== */
+/* ====== بداية قلب الصفحة ====== */
 
-function getSeasonByDate(date) {
-  const year = dayjs(date).year();
-  const month = dayjs(date).month() + 1;
-
-  // بطولات أفريقيا غالبًا موسمها يبدأ من أغسطس
-  return month >= 8 ? year : year - 1;
-}
-
-
+/* ====== لليوم المطلوب (Fixtures) تسحب التجيزات ====== */
 async function fetchByDate(date, path, label) {
   const res = await api.get("/fixtures", {
    params: { date }
@@ -194,6 +190,7 @@ async function fetchByDate(date, path, label) {
     totalMatches: 0,
   };
 
+/* ====== المسؤول عن عدم دخول اي مباراه من خارج الفلتر ====== */
   res.data.response.forEach((m) => {
    const league = LEAGUES[m.league.id];
 if (!league) return; // ⛔ فلترة صارمة بالـ ID
@@ -201,7 +198,7 @@ if (!league) return; // ⛔ فلترة صارمة بالـ ID
 const leagueKey = league.en;
 const leagueName = `${league.ar} | ${league.en}`;
 
-
+/* ====== تجميع الماتشات حسب البطولة ====== */
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
   league_id: m.league.id,
@@ -211,13 +208,14 @@ const leagueName = `${league.ar} | ${league.en}`;
   matches: [],
 };
 
-
+/* ======  ====== */
       logger.leagues[leagueKey] = {
         name: leagueName,
         count: 0,
       };
     }
 
+ /* ======  شكل الي بتظهر بيه الكروت ف الصفحة====== */
     grouped[leagueKey].matches.push({
       id: m.fixture.id,
       status: m.fixture.status.short || "NS",
@@ -236,11 +234,13 @@ const leagueName = `${league.ar} | ${league.en}`;
 
       stadium: m.fixture.venue?.name || "",
     });
+ /* ====== نهاية شكل الي بتظهر بيه الكروت ف الصفحة ====== */   
 
     logger.leagues[leagueKey].count += 1;
     logger.totalMatches += 1;
   });
 
+/* ======  وترتيب الماتشات داخلها LEAGUE_ORDER ترتيب البطولات حسب ====== */   
   const ordered = {};
   LEAGUE_ORDER.forEach((l) => {
     if (grouped[l]) {
@@ -249,9 +249,10 @@ const leagueName = `${league.ar} | ${league.en}`;
     }
   });
 
+/* ====== هنا بنكتب المباريات ف مكان معين ====== */   
   await db.ref(path).set(ordered);
-  
-  /* ====== LOG ====== */
+   
+/* ====== بيطع الشكل الي بيظهر بعمل من بنعمل رن في الاكشن ====== */
   console.log("\n======================================");
   console.log(`📅 ${label} (${date})`);
   console.log("======================================\n");
@@ -271,38 +272,9 @@ const leagueName = `${league.ar} | ${league.en}`;
    return res.data.response;
 }
 
-async function shouldRunNow() {
-  const snap = await db.ref("meta/today").once("value");
-  const meta = snap.val();
 
-  if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
-    console.log("⚠️ No meta found → allow run");
-    return true; // أول اليوم لازم يرن
-  }
-
-  const nowTs = dayjs().unix();
-
-  // قبل أول ماتش بساعة
-  if (nowTs < meta.first_match_ts - 3600) {
-    console.log("⏳ Too early before first match → skip");
-    return false;
-  }
-
-  // بعد آخر ماتش بساعة
-  if (nowTs > meta.last_match_ts + 3600) {
-    console.log("🏁 All matches finished → skip");
-    return false;
-  }
-
-  console.log("🔥 Within match window → allow run");
-  return true;
-}
-
-/* ============================
-   Main
-============================ */
 (async () => {
-
+  // ====== تجهيز الوقت والتواريخ بتوقيت مصر ======
   const now = dayjs().tz("Africa/Cairo");
   const hour = now.hour();
   const minute = now.minute();
@@ -311,61 +283,43 @@ async function shouldRunNow() {
   const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
   const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
-  if (process.env.DISABLE_META === "true") {
-    console.log("🛑 Meta disabled → updating today only");
-    await fetchByDate(todayStr, "matches_today", "Today");
-    console.log("✅ Update done (meta disabled)");
-    process.exit(0);
-  }
+  // ✅ نافذة بداية اليوم: أول 10 دقائق بعد منتصف الليل (مصر)
+  const isMidnightWindow = hour === 0 && minute < 10;
+
+  // ✅ نقرأ meta علشان نضمن إن 3 أيام تتسحب مرة واحدة بس
+  const metaSnap = await db.ref("meta/today").once("value");
+  const meta = metaSnap.val();
+
+  const alreadyUpdatedForToday = meta?.date === todayStr;
+
+  // ============================
+  // 1) أول اليوم → اسحب 3 أيام مرة واحدة
+  // ============================
+  if (isMidnightWindow && !alreadyUpdatedForToday) {
+    console.log("🌙 New day in Egypt → fetching Yesterday/Today/Tomorrow (once)");
 
     const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
     await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
     await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-    if (todayFixtures.length) {
-      const times = todayFixtures.map(f =>
-        dayjs(f.fixture.date).unix()
-      );
+    // نخزن meta بسيطة بس علشان نمنع تكرار سحب 3 أيام
+    await db.ref("meta/today").set({
+      date: todayStr,
+      updated_at: new Date().toISOString(),
+      today_matches_count: todayFixtures?.length ?? 0,
+    });
 
-      await db.ref("meta/today").set({
-        date: todayStr,
-        first_match_ts: Math.min(...times),
-        last_match_ts: Math.max(...times),
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    console.log("✅ Midnight update done");
+    console.log("✅ Midnight refresh done");
     process.exit(0);
   }
 
-  // 🔎 باقي اليوم → نشوف هل نرن ولا لا
-  const snap = await db.ref("meta/today").once("value");
-  const meta = snap.val();
-
-  if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
-    console.log("⚠️ No meta → skipping");
-    process.exit(0);
-  }
-
-  const nowTs = now.unix();
-
-  // قبل أول ماتش بساعة
-  if (nowTs < meta.first_match_ts - 3600) {
-    console.log("⏳ Too early → skip");
-    process.exit(0);
-  }
-
-  // بعد آخر ماتش بنص ساعة فقط (1800 ثانية)
-  if (nowTs > meta.last_match_ts + 1800) {
-    console.log("🏁 All matches finished → skip");
-    process.exit(0);
-  }
-
-  console.log("🔥 Live window → updating today only");
-
+  // ============================
+  // 2) باقي اليوم → اسحب اليوم فقط كل ربع ساعة
+  // ============================
+  console.log("⏱ Regular update → updating TODAY only");
   await fetchByDate(todayStr, "matches_today", "Today");
 
   console.log("✅ Live update done");
   process.exit(0);
 })();
+
