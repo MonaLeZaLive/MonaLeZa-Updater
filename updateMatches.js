@@ -218,29 +218,24 @@ const leagueName = `${league.ar} | ${league.en}`;
       };
     }
 
-    const ts = m.fixture.timestamp; // UTC
+    grouped[leagueKey].matches.push({
+      id: m.fixture.id,
+      status: m.fixture.status.short || "NS",
+      minute: m.fixture.status.elapsed ?? null,
+      time: dayjs(m.fixture.date)
+        .tz("Africa/Cairo")
+        .format("HH:mm"),
 
-grouped[leagueKey].matches.push({
-  id: m.fixture.id,
-  ts, // ✅ مهم
+      home_team: m.teams.home.name,
+      home_logo: m.teams.home.logo,
+      home_score: m.goals.home,
 
-  status: m.fixture.status.short || "NS",
-  minute: m.fixture.status.elapsed ?? null,
+      away_team: m.teams.away.name,
+      away_logo: m.teams.away.logo,
+      away_score: m.goals.away,
 
-  // عرض فقط
-  time: dayjs.unix(ts).tz("Africa/Cairo").format("HH:mm"),
-
-  home_team: m.teams.home.name,
-  home_logo: m.teams.home.logo,
-  home_score: m.goals.home,
-
-  away_team: m.teams.away.name,
-  away_logo: m.teams.away.logo,
-  away_score: m.goals.away,
-
-  stadium: m.fixture.venue?.name || "",
-});
-
+      stadium: m.fixture.venue?.name || "",
+    });
 
     logger.leagues[leagueKey].count += 1;
     logger.totalMatches += 1;
@@ -276,55 +271,25 @@ grouped[leagueKey].matches.push({
    return res.data.response;
 }
 
- async function buildMetaFromFirebaseToday(todayStr) {
-  const snap = await db.ref("matches_today").once("value");
-  const data = snap.val();
-
-  if (!data) return null;
-
-  const times = [];
-
-  Object.values(data).forEach((leagueObj) => {
-    if (!leagueObj?.matches) return;
-    leagueObj.matches.forEach((m) => {
-      if (m?.ts) times.push(m.ts);
-    });
-  });
-
-  if (!times.length) return null;
-
-  return {
-    date: todayStr,
-    first_match_ts: Math.min(...times),
-    last_match_ts: Math.max(...times),
-    updated_at: new Date().toISOString(),
-  };
-}
-
 async function shouldRunNow() {
   const snap = await db.ref("meta/today").once("value");
   const meta = snap.val();
 
- 
-
   if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
     console.log("⚠️ No meta found → allow run");
-    return true;
+    return true; // أول اليوم لازم يرن
   }
 
-  const nowTs = dayjs().utc().unix();
+  const nowTs = dayjs().unix();
 
-     console.log("nowTs:", nowTs, "=>", dayjs.unix(nowTs).utc().format());
-console.log("first:", meta.first_match_ts, "=>", dayjs.unix(meta.first_match_ts).utc().format());
-console.log("last :", meta.last_match_ts, "=>", dayjs.unix(meta.last_match_ts).utc().format());
-
-
-  if (nowTs < meta.first_match_ts - 600) {
+  // قبل أول ماتش بساعة
+  if (nowTs < meta.first_match_ts - 3600) {
     console.log("⏳ Too early before first match → skip");
     return false;
   }
 
-  if (nowTs > meta.last_match_ts + 600) {
+  // بعد آخر ماتش بساعة
+  if (nowTs > meta.last_match_ts + 3600) {
     console.log("🏁 All matches finished → skip");
     return false;
   }
@@ -333,50 +298,69 @@ console.log("last :", meta.last_match_ts, "=>", dayjs.unix(meta.last_match_ts).u
   return true;
 }
 
-
 /* ============================
    Main
 ============================ */
 (async () => {
-  const now = dayjs().utc();
+
+  const now = dayjs().tz("Africa/Cairo");
+  const hour = now.hour();
+  const minute = now.minute();
 
   const todayStr = now.format("YYYY-MM-DD");
   const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
   const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
-  const snap = await db.ref("meta/today").once("value");
-  const meta = snap.val();
+  // 🕛 تشغيل بداية اليوم (00:05 فقط)
+  if (hour === 0 && minute <= 10) {
+    console.log("🌅 Midnight full update");
 
-  // 🌅 أول تشغيل في اليوم → اسحب 3 أيام وابني meta من Firebase
-  if (!meta || meta.date !== todayStr) {
-    console.log("🌅 First run of the day → full update");
-
-    await fetchByDate(todayStr, "matches_today", "Today");
+    const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
     await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
     await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-    const metaFromFb = await buildMetaFromFirebaseToday(todayStr);
+    if (todayFixtures.length) {
+      const times = todayFixtures.map(f =>
+        dayjs(f.fixture.date).unix()
+      );
 
-    if (metaFromFb) {
-      await db.ref("meta/today").set(metaFromFb);
-      console.log("✅ meta/today built from Firebase matches_today");
-    } else {
-      console.log("⚠️ Could not build meta/today from Firebase (no ts found)");
+      await db.ref("meta/today").set({
+        date: todayStr,
+        first_match_ts: Math.min(...times),
+        last_match_ts: Math.max(...times),
+        updated_at: new Date().toISOString(),
+      });
     }
 
-    console.log("✅ First daily update done");
+    console.log("✅ Midnight update done");
     process.exit(0);
   }
 
-  // باقي اليوم → اقرأ meta وقرر
-  const allowed = await shouldRunNow();
+  // 🔎 باقي اليوم → نشوف هل نرن ولا لا
+  const snap = await db.ref("meta/today").once("value");
+  const meta = snap.val();
 
-  if (!allowed) {
-    console.log("🚫 Outside match window → skip");
+  if (!meta || !meta.first_match_ts || !meta.last_match_ts) {
+    console.log("⚠️ No meta → skipping");
+    process.exit(0);
+  }
+
+  const nowTs = now.unix();
+
+  // قبل أول ماتش بساعة
+  if (nowTs < meta.first_match_ts - 3600) {
+    console.log("⏳ Too early → skip");
+    process.exit(0);
+  }
+
+  // بعد آخر ماتش بنص ساعة فقط (1800 ثانية)
+  if (nowTs > meta.last_match_ts + 1800) {
+    console.log("🏁 All matches finished → skip");
     process.exit(0);
   }
 
   console.log("🔥 Live window → updating today only");
+
   await fetchByDate(todayStr, "matches_today", "Today");
 
   console.log("✅ Live update done");
