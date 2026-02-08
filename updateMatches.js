@@ -311,9 +311,12 @@ async function shouldRunNow() {
   const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
   const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
-  // 🕛 تشغيل بداية اليوم (00:05 فقط)
-  if (hour === 0 && minute <= 10) {
-    console.log("🌅 Midnight full update");
+  if (process.env.DISABLE_META === "true") {
+    console.log("🛑 Meta disabled → updating today only");
+    await fetchByDate(todayStr, "matches_today", "Today");
+    console.log("✅ Update done (meta disabled)");
+    process.exit(0);
+  }
 
     const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
     await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
