@@ -274,47 +274,40 @@ const leagueName = `${league.ar} | ${league.en}`;
 
 
 (async () => {
-  // ====== تجهيز الوقت والتواريخ بتوقيت مصر ======
   const now = dayjs().tz("Africa/Cairo");
-  const hour = now.hour();
-  const minute = now.minute();
 
   const todayStr = now.format("YYYY-MM-DD");
   const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
   const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
-  // ✅ نافذة بداية اليوم: أول 10 دقائق بعد منتصف الليل (مصر)
-  const isMidnightWindow = hour === 0 && minute < 10;
-
-  // ✅ نقرأ meta علشان نضمن إن 3 أيام تتسحب مرة واحدة بس
+  // ✅ نقرأ meta علشان نضمن إن 3 أيام تتسحب مرة واحدة بس (أول رن في اليوم)
   const metaSnap = await db.ref("meta/today").once("value");
   const meta = metaSnap.val();
 
-  const alreadyUpdatedForToday = meta?.date === todayStr;
+  const needsFullRefresh = !meta?.date || meta.date !== todayStr;
 
   // ============================
-  // 1) أول اليوم → اسحب 3 أيام مرة واحدة
+  // 1) أول رن في اليوم → اسحب 3 أيام مرة واحدة
   // ============================
-  if (isMidnightWindow && !alreadyUpdatedForToday) {
-    console.log("🌙 New day in Egypt → fetching Yesterday/Today/Tomorrow (once)");
+  if (needsFullRefresh) {
+    console.log("🌙 New day detected → fetching Yesterday/Today/Tomorrow (once)");
 
     const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
     await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
     await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-    // نخزن meta بسيطة بس علشان نمنع تكرار سحب 3 أيام
     await db.ref("meta/today").set({
       date: todayStr,
       updated_at: new Date().toISOString(),
       today_matches_count: todayFixtures?.length ?? 0,
     });
 
-    console.log("✅ Midnight refresh done");
+    console.log("✅ Full refresh done");
     process.exit(0);
   }
 
   // ============================
-  // 2) باقي اليوم → اسحب اليوم فقط كل ربع ساعة
+  // 2) باقي اليوم → اسحب اليوم فقط
   // ============================
   console.log("⏱ Regular update → updating TODAY only");
   await fetchByDate(todayStr, "matches_today", "Today");
@@ -322,4 +315,3 @@ const leagueName = `${league.ar} | ${league.en}`;
   console.log("✅ Live update done");
   process.exit(0);
 })();
-
