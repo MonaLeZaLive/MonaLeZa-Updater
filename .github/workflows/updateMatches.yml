@@ -19,6 +19,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm   # 👈 دي الإضافة المهمة
 
       - name: Install deps
         run: npm install
