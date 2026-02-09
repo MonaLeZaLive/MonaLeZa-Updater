@@ -1,10 +1,7 @@
 name: Update Matches
 
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
-
 
 jobs:
   update:
@@ -20,9 +17,9 @@ jobs:
           node-version: 18
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
-      - name: Run updateMatches
+      - name: Run updater
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
