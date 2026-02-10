@@ -281,16 +281,59 @@ function buildTodayMatchesTime(fixtures) {
     .map((m) => {
       const dt = dayjs(m.fixture.date).tz("Africa/Cairo");
       return {
-        ts: dt.unix(),
         time: dt.format("HH:mm"),
         fixture_id: m.fixture.id,
         home: m.teams.home.name,
         away: m.teams.away.name,
       };
     })
-    // ترتيب الوقت من القريب للبعيد = ترتيب زمني داخل اليوم
-    .sort((a, b) => a.ts - b.ts);
+    // ترتيب حسب الوقت (من القريب للبعيد)
+    .sort((a, b) => a.time.localeCompare(b.time));
 }
+
+/* ====== عشان يقرر نسحب داتا ولا لا  ====== */
+
+function normalizeMatchesTime(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "object") return Object.values(raw);
+  return [];
+}
+
+// بيرجع true لو فيه ماتش دلوقتي (تقريبًا) أو داخل خلال PRE_START_MIN
+function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo, todayStr) {
+  const PRE_START_MIN = 0;     // لو عايز قبل المباراة بكام دقيقة (مثلاً 10) خليها 10
+  const MATCH_WINDOW_MIN = 160; // 2س 40د تقريبًا (زود/قلل براحتك)
+
+  const list = normalizeMatchesTime(matchesTimeRaw);
+
+  // list ممكن تكون [{time:"12:00"...}] أو ["12:00"...]
+  const times = list
+    .map((x) => (typeof x === "string" ? x : x?.time))
+    .filter(Boolean);
+
+  if (!times.length) return false;
+
+  const now = dayjs(nowCairo); // already Cairo tz
+  const nowMin = now.hour() * 60 + now.minute();
+
+  // نحول كل "HH:mm" لدقائق من بداية اليوم
+  for (const t of times) {
+    const [hh, mm] = String(t).split(":").map(Number);
+    if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
+
+    const matchMin = hh * 60 + mm;
+
+    // نافذة السحب: من (قبل المباراة PRE_START) لحد (بعدها MATCH_WINDOW)
+    const start = matchMin - PRE_START_MIN;
+    const end = matchMin + MATCH_WINDOW_MIN;
+
+    if (nowMin >= start && nowMin <= end) return true;
+  }
+
+  return false;
+}
+
 
 /* ====== تنظبم ====== */
 
