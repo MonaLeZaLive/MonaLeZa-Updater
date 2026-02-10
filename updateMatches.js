@@ -374,13 +374,25 @@ await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
     process.exit(0);
   }
 
-  // ============================
-  // 2) باقي اليوم → اسحب اليوم فقط
-  // ============================
-  console.log("⏱ Regular update → updating TODAY only");
-  const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
-  await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
+ // ============================
+// 2) باقي اليوم → اسحب اليوم فقط (بس لو في ماتش قريب/داخل نافذة التحديث)
+// ============================
 
-  console.log("✅ Live update done");
+// اقرأ matches_time من Firebase
+const mtSnap = await db.ref("matches_time").once("value");
+const matchesTime = mtSnap.val();
+
+// القرار: نسحب API ولا لا؟
+const shouldFetch = shouldFetchNowFromMatchesTime(matchesTime, now, todayStr);
+
+if (!shouldFetch) {
+  console.log("🛑 No live/near matches now → skipping API call");
   process.exit(0);
-})();
+}
+
+console.log("🔥 Match window active → fetching TODAY");
+const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
+
+console.log("✅ Live update done");
+process.exit(0);
