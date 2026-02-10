@@ -181,7 +181,8 @@ function sortMatches(matches) {
 /* ====== لليوم المطلوب (Fixtures) تسحب التجيزات ====== */
 async function fetchByDate(date, path, label) {
   const res = await api.get("/fixtures", {
-   params: { date }
+   params: { date, timezone: "Africa/Cairo" }
+
   });
 
   const grouped = {};
@@ -272,6 +273,26 @@ const leagueName = `${league.ar} | ${league.en}`;
    return res.data.response;
 }
 
+/* ====== ف مكان لوحده firebase هنا عشان يظهر توقيت المباريات ف ال ====== */
+
+function buildTodayMatchesTime(fixtures) {
+  return fixtures
+    .filter((m) => LEAGUES[m.league?.id]) // نفس فلتر البطولات
+    .map((m) => {
+      const dt = dayjs(m.fixture.date).tz("Africa/Cairo");
+      return {
+        ts: dt.unix(),
+        time: dt.format("HH:mm"),
+        fixture_id: m.fixture.id,
+        home: m.teams.home.name,
+        away: m.teams.away.name,
+      };
+    })
+    // ترتيب الوقت من القريب للبعيد = ترتيب زمني داخل اليوم
+    .sort((a, b) => a.ts - b.ts);
+}
+
+/* ====== تنظبم ====== */
 
 (async () => {
   const now = dayjs().tz("Africa/Cairo");
@@ -292,9 +313,13 @@ const leagueName = `${league.ar} | ${league.en}`;
   if (needsFullRefresh) {
     console.log("🌙 New day detected → fetching Yesterday/Today/Tomorrow (once)");
 
-    const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
-    await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
-    await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
+   const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
+
+// ✅ matches_time لليوم فقط
+await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
+
 
     await db.ref("meta/today").set({
       date: todayStr,
@@ -310,7 +335,8 @@ const leagueName = `${league.ar} | ${league.en}`;
   // 2) باقي اليوم → اسحب اليوم فقط
   // ============================
   console.log("⏱ Regular update → updating TODAY only");
-  await fetchByDate(todayStr, "matches_today", "Today");
+  const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+  await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
 
   console.log("✅ Live update done");
   process.exit(0);
