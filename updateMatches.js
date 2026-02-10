@@ -273,6 +273,73 @@ const leagueName = `${league.ar} | ${league.en}`;
    return res.data.response;
 }
 
+async function writeFixturesToDb(fixtures, path, label, teamsArDict = null) {
+  const grouped = {};
+  const logger = { leagues: {}, totalMatches: 0 };
+
+  (fixtures || []).forEach((m) => {
+    const league = LEAGUES[m.league.id];
+    if (!league) return;
+
+    const leagueKey = league.en;
+    const leagueName = `${league.ar} | ${league.en}`;
+
+    if (!grouped[leagueKey]) {
+      grouped[leagueKey] = {
+        league_id: m.league.id,
+        league_name_ar: league?.ar || m.league.name,
+        league_name_en: league?.en || m.league.name,
+        league_logo: m.league.logo,
+        matches: [],
+      };
+
+      logger.leagues[leagueKey] = { name: leagueName, count: 0 };
+    }
+
+    grouped[leagueKey].matches.push({
+      id: m.fixture.id,
+      status: m.fixture.status.short || "NS",
+      minute: m.fixture.status.elapsed ?? null,
+      time: dayjs(m.fixture.date).tz("Africa/Cairo").format("HH:mm"),
+
+      home_team: teamsArDict
+        ? teamDisplayName(m.teams.home.id, m.teams.home.name, teamsArDict)
+        : m.teams.home.name,
+      home_logo: m.teams.home.logo,
+      home_score: m.goals.home,
+
+      away_team: teamsArDict
+        ? teamDisplayName(m.teams.away.id, m.teams.away.name, teamsArDict)
+        : m.teams.away.name,
+      away_logo: m.teams.away.logo,
+      away_score: m.goals.away,
+
+      stadium: m.fixture.venue?.name || "",
+    });
+
+    logger.leagues[leagueKey].count += 1;
+    logger.totalMatches += 1;
+  });
+
+  const ordered = {};
+  LEAGUE_ORDER.forEach((l) => {
+    if (grouped[l]) {
+      grouped[l].matches = sortMatches(grouped[l].matches);
+      ordered[l] = grouped[l];
+    }
+  });
+
+  await db.ref(path).set(ordered);
+
+  console.log("\n======================================");
+  console.log(`📝 Rewrite ${label} (${path})`);
+  console.log("======================================\n");
+  console.log(`✅ Total leagues : ${Object.keys(logger.leagues).length}`);
+  console.log(`✅ Total matches : ${logger.totalMatches}`);
+  console.log("======================================\n");
+}
+
+
 /* ====== ف مكان لوحده firebase هنا عشان يظهر توقيت المباريات ف ال ====== */
 
 function buildTodayMatchesTime(fixtures) {
@@ -301,7 +368,7 @@ function normalizeMatchesTime(raw) {
 }
 
 // بيرجع true لو فيه ماتش دلوقتي (تقريبًا) أو داخل خلال PRE_START_MIN
-function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo, todayStr) {
+function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo) {
   const PRE_START_MIN = 0;     // لو عايز قبل المباراة بكام دقيقة (مثلاً 10) خليها 10
   const MATCH_WINDOW_MIN = 160; // 2س 40د تقريبًا (زود/قلل براحتك)
 
@@ -335,6 +402,134 @@ function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo, todayStr) {
 }
 
 
+// ====== Extract unique teams from fixtures (API-Football response) ======
+function extractTeams(fixtures) {
+  const map = new Map();
+  for (const m of fixtures || []) {
+    const h = m?.teams?.home;
+    const a = m?.teams?.away;
+    if (h?.id && h?.name) map.set(h.id, { id: h.id, en: h.name });
+    if (a?.id && a?.name) map.set(a.id, { id: a.id, en: a.name });
+  }
+  return Array.from(map.values());
+}
+
+// ====== Save/update teams index (no translations) ======
+async function upsertTeamsIndex(teams) {
+  if (!teams?.length) return;
+  const updates = {};
+  const nowIso = new Date().toISOString();
+  for (const t of teams) {
+    updates[`teams_index/${t.id}`] = { en: t.en, last_seen: nowIso };
+  }
+  await db.ref().update(updates);
+}
+
+// ====== Read existing Arabic dictionary from Firebase ======
+async function readTeamsArDict() {
+  const snap = await db.ref("dict/teams_ar").once("value");
+  return snap.val() || {};
+}
+
+// ====== Fetch Arabic labels from Wikidata (safe, best-effort) ======
+// We do "one request per batch" to keep it light.
+async function fetchWikidataArabicLabelsBatch(teamsBatch) {
+  // Wikidata SPARQL endpoint
+  const endpoint = "https://query.wikidata.org/sparql";
+
+  // Build VALUES list using normalized names + original names
+  // We'll try exact label match on English first (most reliable).
+  const values = teamsBatch
+    .map((t) => `"${String(t.en).replace(/"/g, '\\"')}"@en`)
+    .join(" ");
+
+  const query = `
+SELECT ?enLabel ?arLabel WHERE {
+  VALUES ?enLabel { ${values} }
+  ?item rdfs:label ?enLabel .
+  OPTIONAL { ?item rdfs:label ?arLabel FILTER(LANG(?arLabel) = "ar") }
+}
+`;
+
+  try {
+    const res = await axios.get(endpoint, {
+      headers: {
+        Accept: "application/sparql+json",
+        "User-Agent": "monaleza-live/1.0 (contact: github-actions)",
+      },
+      params: { format: "json", query },
+      timeout: 15000,
+    });
+
+    const rows = res?.data?.results?.bindings || [];
+    const out = new Map(); // en -> ar
+    for (const r of rows) {
+      const en = r?.enLabel?.value;
+      const ar = r?.arLabel?.value;
+      if (en && ar) out.set(en, ar);
+    }
+    return out;
+  } catch (e) {
+    console.log("⚠️ Wikidata fetch failed (batch) →", e?.message || e);
+    return new Map(); // fail-safe
+  }
+}
+
+// ====== Sync missing Arabic names (best-effort, no failures) ======
+async function syncTeamsArabicFromWikidata(allTeams, existingDict) {
+  const missing = (allTeams || []).filter((t) => !existingDict?.[t.id]);
+
+  if (!missing.length) {
+    console.log("✅ No missing team translations");
+    return { added: 0, dict: existingDict };
+  }
+
+  console.log(`🌍 Wikidata: missing teams = ${missing.length}`);
+
+  const BATCH = 25;
+  const updates = {};
+  let added = 0;
+  const nowIso = new Date().toISOString();
+
+  for (let i = 0; i < missing.length; i += BATCH) {
+    const batch = missing.slice(i, i + BATCH);
+    const enToAr = await fetchWikidataArabicLabelsBatch(batch);
+
+    for (const t of batch) {
+      const ar = enToAr.get(t.en);
+      if (!ar) continue;
+
+      updates[`dict/teams_ar/${t.id}`] = {
+        ar,
+        en: t.en,
+        source: "wikidata",
+        updated_at: nowIso,
+      };
+      added++;
+    }
+  }
+
+  if (Object.keys(updates).length) {
+    await db.ref().update(updates);
+    console.log(`✅ Wikidata: added translations = ${added}`);
+    const dict = await readTeamsArDict();
+    return { added, dict };
+  }
+
+  console.log("ℹ️ Wikidata: no NEW translations found in this run");
+  return { added: 0, dict: existingDict };
+}
+
+
+
+// ====== Make display name "AR | EN" using dict ======
+function teamDisplayName(teamId, enName, dict) {
+  const ar = dict?.[teamId]?.ar;
+  if (ar) return `${ar} | ${enName}`;
+  return enName; // fallback safe
+}
+
+
 /* ====== تنظبم ====== */
 
 (async () => {
@@ -353,26 +548,57 @@ function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo, todayStr) {
   // ============================
   // 1) أول رن في اليوم → اسحب 3 أيام مرة واحدة
   // ============================
-  if (needsFullRefresh) {
-    console.log("🌙 New day detected → fetching Yesterday/Today/Tomorrow (once)");
+ if (needsFullRefresh) {
+  console.log("🌙 New day detected → fetching Yesterday/Today/Tomorrow (once)");
 
-   const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
-await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
-await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
+  // 1) Fetch raw fixtures (API-Football) مرة واحدة لكل يوم
+  const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+  const yFixtures = await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+  const tFixtures = await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-// ✅ matches_time لليوم فقط
-await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
+  // 2) Build matches_time لليوم فقط (زي ما عندك)
+  await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
 
+  // 3) Collect teams from ALL 3 days (عشان العربي يظهر في كل التلاتة)
+  const allTeams = [
+    ...extractTeams(todayFixtures),
+    ...extractTeams(yFixtures),
+    ...extractTeams(tFixtures),
+  ];
 
-    await db.ref("meta/today").set({
-      date: todayStr,
-      updated_at: new Date().toISOString(),
-      today_matches_count: todayFixtures?.length ?? 0,
-    });
+  // Unique by id
+  const uniq = new Map();
+  for (const t of allTeams) uniq.set(t.id, t);
+  const uniqueTeams = Array.from(uniq.values());
 
-    console.log("✅ Full refresh done");
-    process.exit(0);
-  }
+  // 4) Store teams_index (مجاني، بدون API إضافي)
+  await upsertTeamsIndex(uniqueTeams);
+
+  // 5) Read dict + best-effort sync from Wikidata (لو فشل مش هنوقف)
+  const existing = await readTeamsArDict();
+  const { dict } = await syncTeamsArabicFromWikidata(uniqueTeams, existing);
+
+  // 6) Rewrite 3 days with AR|EN (بدون أي طلب API-Football إضافي)
+  // بدل ما نعيد سحب API، هنستغل إن fetchByDate رجّعت response؟
+  // حاليا fetchByDate بترجع response فقط، لكنها كمان بتكتب للـDB.
+  // عشان نكتب AR|EN لازم نعيد كتابة الـDB من نفس fixtures:
+  // أسهل حل: ننادي fetchByDate مرة تانية "لكن ده هيعمل API call" ❌
+  // فهنعمل Function صغيرة تكتب grouped من fixtures نفسها.
+
+  // هنستخدم حل بسيط: نعمل writer من fixtures للـDB (بدون API)
+  await writeFixturesToDb(todayFixtures, "matches_today", "Today", dict);
+  await writeFixturesToDb(yFixtures, "matches_yesterday", "Yesterday", dict);
+  await writeFixturesToDb(tFixtures, "matches_tomorrow", "Tomorrow", dict);
+
+  await db.ref("meta/today").set({
+    date: todayStr,
+    updated_at: new Date().toISOString(),
+    today_matches_count: todayFixtures?.length ?? 0,
+  });
+
+  console.log("✅ Full refresh done");
+  process.exit(0);
+}
 
  // ============================
 // 2) باقي اليوم → اسحب اليوم فقط (بس لو في ماتش قريب/داخل نافذة التحديث)
@@ -383,7 +609,7 @@ const mtSnap = await db.ref("matches_time").once("value");
 const matchesTime = mtSnap.val();
 
 // القرار: نسحب API ولا لا؟
-const shouldFetch = shouldFetchNowFromMatchesTime(matchesTime, now, todayStr);
+const shouldFetch = shouldFetchNowFromMatchesTime(matchesTime, now);
 
 if (!shouldFetch) {
   console.log("🛑 No live/near matches now → skipping API call");
@@ -394,7 +620,11 @@ console.log("🔥 Match window active → fetching TODAY");
 const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
 await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
 
+const dict = await readTeamsArDict();
+await writeFixturesToDb(todayFixtures, "matches_today", "Today", dict);
+
 console.log("✅ Live update done");
 process.exit(0);
+
 })();
 
