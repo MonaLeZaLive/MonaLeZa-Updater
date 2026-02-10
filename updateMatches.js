@@ -396,3 +396,5 @@ await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
 
 console.log("✅ Live update done");
 process.exit(0);
+})();
+
