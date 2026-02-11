@@ -475,11 +475,18 @@ async function fetchWikidataArabicLabelsBatch(teamsBatch) {
     .map((t) => `"${String(t.en).replace(/"/g, '\\"')}"@en`)
     .join(" ");
 
-  const query = `
+ const query = `
 SELECT ?enLabel ?arLabel WHERE {
   VALUES ?enLabel { ${values} }
+
   ?item rdfs:label ?enLabel .
-  OPTIONAL { ?item rdfs:label ?arLabel FILTER(LANG(?arLabel) = "ar") }
+  VALUES ?type { wd:Q476028 wd:Q847017 }
+  ?item wdt:P31 ?type . # ⚽ لازم يكون نادي كرة قدم
+
+  OPTIONAL {
+    ?item rdfs:label ?arLabel .
+    FILTER(LANG(?arLabel) = "ar")
+  }
 }
 `;
 
@@ -521,13 +528,21 @@ SELECT ?enLabel ?arLabel WHERE {
           language: "en",
           uselang: "en",
           search: t.en,
-          limit: 1,
+          limit: 3,
+          type: "item",
         },
         headers: { "User-Agent": "monaleza-live/1.0 (contact: github-actions)" },
         timeout: 15000,
       });
 
-      const id = s?.data?.search?.[0]?.id;
+  const best = (s?.data?.search || []).find(x => {
+  const d = String(x?.description || "").toLowerCase();
+  return d.includes("football") || d.includes("soccer") || d.includes("club");
+});
+
+
+const id = best?.id || s?.data?.search?.[0]?.id;
+
       if (id) ids.push({ en: t.en, id });
     }
 
@@ -578,6 +593,7 @@ function queueRootForDay(dayStr) {
 function queueStateForDay(dayStr) {
   return `meta/ar_queue_state/${dayStr}`;
 }
+
 
 // Build queue with missing team IDs (only once/day)
 async function buildArabicQueueForDay(dayStr, teams, existingDict) {
