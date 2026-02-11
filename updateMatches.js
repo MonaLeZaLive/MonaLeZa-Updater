@@ -39,10 +39,6 @@ const api = axios.create({
      نهاية تهيئة ال API Football
 ============================ */
 
-const rawCount = res.data.response.length;
-console.log(`🧪 ${label} raw fixtures from API = ${rawCount}`);
-
-
 /* ============================
      خريطة البطولات LEAGUES
 ============================ */
