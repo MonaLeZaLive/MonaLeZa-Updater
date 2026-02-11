@@ -401,6 +401,27 @@ function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo) {
   return false;
 }
 
+// ====== Check if yesterday DB still contains active (not-finished) matches ======
+function hasActiveMatchesInDb(dayData) {
+  if (!dayData || typeof dayData !== "object") return false;
+
+  const FINISHED = new Set([
+    "FT", "AET", "PEN", // انتهت
+    "CANC", "PST", "ABD", "WO", "AWD", "TBD" // حالات موقوفة/ملغية/غير محددة
+  ]);
+
+  for (const leagueKey of Object.keys(dayData)) {
+    const league = dayData[leagueKey];
+    const matches = league?.matches || [];
+    for (const m of matches) {
+      const st = m?.status || "NS";
+      // لو مش ضمن المنتهي يبقى لسه شغال/لايف/بداية/شوط/إضافة... إلخ
+      if (!FINISHED.has(st)) return true;
+    }
+  }
+  return false;
+}
+
 
 // ====== Extract unique teams from fixtures (API-Football response) ======
 function extractTeams(fixtures) {
@@ -431,14 +452,11 @@ async function readTeamsArDict() {
   return snap.val() || {};
 }
 
-// ====== Fetch Arabic labels from Wikidata (safe, best-effort) ======
-// We do "one request per batch" to keep it light.
+// ====== Fetch Arabic labels from Wikidata (stronger, best-effort) ======
 async function fetchWikidataArabicLabelsBatch(teamsBatch) {
-  // Wikidata SPARQL endpoint
   const endpoint = "https://query.wikidata.org/sparql";
 
-  // Build VALUES list using normalized names + original names
-  // We'll try exact label match on English first (most reliable).
+  // 1) Try SPARQL exact label match (your current approach)
   const values = teamsBatch
     .map((t) => `"${String(t.en).replace(/"/g, '\\"')}"@en`)
     .join(" ");
@@ -451,6 +469,8 @@ SELECT ?enLabel ?arLabel WHERE {
 }
 `;
 
+  const out = new Map(); // en -> ar
+
   try {
     const res = await axios.get(endpoint, {
       headers: {
@@ -462,16 +482,68 @@ SELECT ?enLabel ?arLabel WHERE {
     });
 
     const rows = res?.data?.results?.bindings || [];
-    const out = new Map(); // en -> ar
     for (const r of rows) {
       const en = r?.enLabel?.value;
       const ar = r?.arLabel?.value;
       if (en && ar) out.set(en, ar);
     }
+  } catch (e) {
+    console.log("⚠️ SPARQL failed →", e?.message || e);
+  }
+
+  // 2) Fallback: if some EN names still missing, use Wikidata API search
+  const missing = teamsBatch.filter((t) => !out.has(t.en));
+  if (!missing.length) return out;
+
+  try {
+    // Search IDs one-by-one (limit) then get labels in ONE request
+    const ids = [];
+
+    for (const t of missing) {
+      const s = await axios.get("https://www.wikidata.org/w/api.php", {
+        params: {
+          action: "wbsearchentities",
+          format: "json",
+          language: "en",
+          uselang: "en",
+          search: t.en,
+          limit: 1,
+        },
+        headers: { "User-Agent": "monaleza-live/1.0 (contact: github-actions)" },
+        timeout: 15000,
+      });
+
+      const id = s?.data?.search?.[0]?.id;
+      if (id) ids.push({ en: t.en, id });
+    }
+
+    if (!ids.length) return out;
+
+    // Fetch Arabic labels for all found IDs in a single request
+    const idsStr = ids.map((x) => x.id).join("|");
+    const g = await axios.get("https://www.wikidata.org/w/api.php", {
+      params: {
+        action: "wbgetentities",
+        format: "json",
+        props: "labels",
+        languages: "ar|en",
+        ids: idsStr,
+      },
+      headers: { "User-Agent": "monaleza-live/1.0 (contact: github-actions)" },
+      timeout: 15000,
+    });
+
+    const entities = g?.data?.entities || {};
+    for (const item of ids) {
+      const ent = entities[item.id];
+      const ar = ent?.labels?.ar?.value;
+      if (ar) out.set(item.en, ar);
+    }
+
     return out;
   } catch (e) {
-    console.log("⚠️ Wikidata fetch failed (batch) →", e?.message || e);
-    return new Map(); // fail-safe
+    console.log("⚠️ Wikidata API fallback failed →", e?.message || e);
+    return out; // fail-safe
   }
 }
 
@@ -527,6 +599,41 @@ function teamDisplayName(teamId, enName, dict) {
   const ar = dict?.[teamId]?.ar;
   if (ar) return `${ar} | ${enName}`;
   return enName; // fallback safe
+}
+
+// ====== Helpers to ensure Tomorrow exists even if full refresh didn't run ======
+
+async function readDbOnce(path) {
+  const snap = await db.ref(path).once("value");
+  return snap.val();
+}
+
+function isTomorrowDataMissing(tomorrowData) {
+  // لو null/undefined أو object فاضي
+  if (!tomorrowData) return true;
+  if (typeof tomorrowData !== "object") return true;
+  return Object.keys(tomorrowData).length === 0;
+}
+
+async function ensureTomorrowFetched(tomorrowStr) {
+  // 1) شوف لو matches_tomorrow موجود ولا لأ
+  const existingTomorrow = await readDbOnce("matches_tomorrow");
+  const missing = isTomorrowDataMissing(existingTomorrow);
+
+  // 2) لو فاضي، اسحب الغد
+  if (missing) {
+    console.log("📌 matches_tomorrow missing → fetching TOMORROW");
+    const tFixtures = await fetchByDate(tomorrowStr, "matches_tomorrow", "Tomorrow");
+
+    // لو عايز تضمن العربي كمان
+    const dict = await readTeamsArDict();
+    await writeFixturesToDb(tFixtures, "matches_tomorrow", "Tomorrow", dict);
+
+    return true;
+  }
+
+  console.log("✅ matches_tomorrow already exists → skip tomorrow fetch");
+  return false;
 }
 
 
@@ -600,6 +707,8 @@ function teamDisplayName(teamId, enName, dict) {
   process.exit(0);
 }
 
+const tomorrowFetched = await ensureTomorrowFetched(tomorrow);
+
  // ============================
 // 2) باقي اليوم → اسحب اليوم فقط (بس لو في ماتش قريب/داخل نافذة التحديث)
 // ============================
@@ -608,20 +717,39 @@ function teamDisplayName(teamId, enName, dict) {
 const mtSnap = await db.ref("matches_time").once("value");
 const matchesTime = mtSnap.val();
 
-// القرار: نسحب API ولا لا؟
-const shouldFetch = shouldFetchNowFromMatchesTime(matchesTime, now);
+// 1) شوف لو الأمس لسه فيه ماتشات مش منتهية من DB
+const ySnap = await db.ref("matches_yesterday").once("value");
+const yData = ySnap.val();
+const yesterdayActive = hasActiveMatchesInDb(yData);
 
-if (!shouldFetch) {
-  console.log("🛑 No live/near matches now → skipping API call");
+// 2) القرار: نسحب اليوم؟ (حسب نافذة الماتشات)
+const shouldFetchToday = shouldFetchNowFromMatchesTime(matchesTime, now);
+
+// 3) لو لا اليوم ولا الأمس محتاجين تحديث → وقف
+if (!shouldFetchToday && !yesterdayActive && !tomorrowFetched) {
+  console.log("🛑 No live/near matches today, yesterday finished, and tomorrow already exists → skipping API call");
   process.exit(0);
 }
 
-console.log("🔥 Match window active → fetching TODAY");
-const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
-await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
 
 const dict = await readTeamsArDict();
-await writeFixturesToDb(todayFixtures, "matches_today", "Today", dict);
+
+// 4) لو الأمس لسه فيه شغل → اسحب الأمس وحدثه (ده هيتكرر لحد ما يخلص)
+if (yesterdayActive) {
+  console.log("🔥 Yesterday still active → fetching YESTERDAY");
+  const yFixtures = await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+  await writeFixturesToDb(yFixtures, "matches_yesterday", "Yesterday", dict);
+}
+
+// 5) لو نافذة اليوم شغالة → اسحب اليوم وحدثه
+if (shouldFetchToday) {
+  console.log("🔥 Match window active → fetching TODAY");
+  const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+  await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
+  await writeFixturesToDb(todayFixtures, "matches_today", "Today", dict);
+} else {
+  console.log("ℹ️ Today not in window → skip today fetch");
+}
 
 console.log("✅ Live update done");
 process.exit(0);
