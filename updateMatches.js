@@ -874,10 +874,11 @@ const arRun = await processArabicQueueIfNeeded(todayStr);
 const arabicDidWork = !arRun?.skipped; // true لو ترجم دفعة
 
 if (arabicDidWork) {
-  const dictAfter = await readTeamsArDict();
-  await rewriteStoredMatchesWithDict("matches_today", dictAfter);
-  await rewriteStoredMatchesWithDict("matches_yesterday", dictAfter);
-  await rewriteStoredMatchesWithDict("matches_tomorrow", dictAfter);
+  // Apply dict to stored matches every run (cheap, no API calls)
+const dictAfter = await readTeamsArDict();
+await rewriteStoredMatchesWithDict("matches_today", dictAfter);
+await rewriteStoredMatchesWithDict("matches_yesterday", dictAfter);
+await rewriteStoredMatchesWithDict("matches_tomorrow", dictAfter);
 }
    
 
