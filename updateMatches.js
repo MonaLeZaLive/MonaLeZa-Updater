@@ -165,15 +165,22 @@ const LEAGUE_ORDER = [
 /* ====== ترتيب الماتشات جوّه كل بطولة ====== */
 
 function sortMatches(matches) {
-  const priority = { LIVE: 1, NS: 2, FT: 3 };
+  const liveStatuses = new Set(["1H", "2H", "HT", "ET", "BT", "P", "INT", "LIVE"]);
 
   return matches.sort((a, b) => {
-    const aStatus = a.status || "NS";
-    const bStatus = b.status || "NS";
+    const aSt = a.status || "NS";
+    const bSt = b.status || "NS";
 
-    return (priority[aStatus] || 3) - (priority[bStatus] || 3);
+    const aPri = liveStatuses.has(aSt) ? 1 : aSt === "NS" ? 2 : 3;
+    const bPri = liveStatuses.has(bSt) ? 1 : bSt === "NS" ? 2 : 3;
+
+    if (aPri !== bPri) return aPri - bPri;
+
+    // لو الاتنين NS رتّبهم بالوقت
+    return String(a.time || "").localeCompare(String(b.time || ""));
   });
 }
+
 
 /* ====== نهاية ترتيب الماتشات جوّه كل بطولة ====== */
 /* ====== بداية قلب الصفحة ====== */
@@ -191,6 +198,7 @@ async function fetchByDate(date, path, label) {
     totalMatches: 0,
   };
 
+   
 /* ====== المسؤول عن عدم دخول اي مباراه من خارج الفلتر ====== */
   res.data.response.forEach((m) => {
    const league = LEAGUES[m.league.id];
@@ -228,11 +236,13 @@ const leagueName = `${league.ar} | ${league.en}`;
       home_team: m.teams.home.name,
       home_logo: m.teams.home.logo,
       home_score: m.goals.home,
-
+      home_id: m.teams.home.id,
+       
       away_team: m.teams.away.name,
       away_logo: m.teams.away.logo,
       away_score: m.goals.away,
-
+      away_id: m.teams.away.id,
+       
       stadium: m.fixture.venue?.name || "",
     });
  /* ====== نهاية شكل الي بتظهر بيه الكروت ف الصفحة ====== */   
@@ -251,7 +261,7 @@ const leagueName = `${league.ar} | ${league.en}`;
   });
 
 /* ====== هنا بنكتب المباريات ف مكان معين ====== */   
-  await db.ref(path).set(ordered);
+await db.ref(path).set(ordered); 
    
 /* ====== بيطع الشكل الي بيظهر بعمل من بنعمل رن في الاكشن ====== */
   console.log("\n======================================");
@@ -307,12 +317,16 @@ async function writeFixturesToDb(fixtures, path, label, teamsArDict = null) {
         : m.teams.home.name,
       home_logo: m.teams.home.logo,
       home_score: m.goals.home,
+      home_id: m.teams.home.id,
+ 
 
       away_team: teamsArDict
         ? teamDisplayName(m.teams.away.id, m.teams.away.name, teamsArDict)
         : m.teams.away.name,
       away_logo: m.teams.away.logo,
       away_score: m.goals.away,
+      away_id: m.teams.away.id,
+ 
 
       stadium: m.fixture.venue?.name || "",
     });
@@ -369,7 +383,7 @@ function normalizeMatchesTime(raw) {
 
 // بيرجع true لو فيه ماتش دلوقتي (تقريبًا) أو داخل خلال PRE_START_MIN
 function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo) {
-  const PRE_START_MIN = 0;     // لو عايز قبل المباراة بكام دقيقة (مثلاً 10) خليها 10
+  const PRE_START_MIN = 10;     // لو عايز قبل المباراة بكام دقيقة (مثلاً 10) خليها 10
   const MATCH_WINDOW_MIN = 160; // 2س 40د تقريبًا (زود/قلل براحتك)
 
   const list = normalizeMatchesTime(matchesTimeRaw);
@@ -547,52 +561,6 @@ SELECT ?enLabel ?arLabel WHERE {
   }
 }
 
-// ====== Sync missing Arabic names (best-effort, no failures) ======
-async function syncTeamsArabicFromWikidata(allTeams, existingDict) {
-  const missing = (allTeams || []).filter((t) => !existingDict?.[t.id]);
-
-  if (!missing.length) {
-    console.log("✅ No missing team translations");
-    return { added: 0, dict: existingDict };
-  }
-
-  console.log(`🌍 Wikidata: missing teams = ${missing.length}`);
-
-  const BATCH = 25;
-  const updates = {};
-  let added = 0;
-  const nowIso = new Date().toISOString();
-
-  for (let i = 0; i < missing.length; i += BATCH) {
-    const batch = missing.slice(i, i + BATCH);
-    const enToAr = await fetchWikidataArabicLabelsBatch(batch);
-
-    for (const t of batch) {
-      const ar = enToAr.get(t.en);
-      if (!ar) continue;
-
-      updates[`dict/teams_ar/${t.id}`] = {
-        ar,
-        en: t.en,
-        source: "wikidata",
-        updated_at: nowIso,
-      };
-      added++;
-    }
-  }
-
-  if (Object.keys(updates).length) {
-    await db.ref().update(updates);
-    console.log(`✅ Wikidata: added translations = ${added}`);
-    const dict = await readTeamsArDict();
-    return { added, dict };
-  }
-
-  console.log("ℹ️ Wikidata: no NEW translations found in this run");
-  return { added: 0, dict: existingDict };
-}
-
-
 
 // ====== Make display name "AR | EN" using dict ======
 function teamDisplayName(teamId, enName, dict) {
@@ -601,12 +569,210 @@ function teamDisplayName(teamId, enName, dict) {
   return enName; // fallback safe
 }
 
+// ====== Arabic translation queue (per-day) ======
+
+function queueRootForDay(dayStr) {
+  return `meta/ar_queue/${dayStr}`;
+}
+
+function queueStateForDay(dayStr) {
+  return `meta/ar_queue_state/${dayStr}`;
+}
+
+// Build queue with missing team IDs (only once/day)
+async function buildArabicQueueForDay(dayStr, teams, existingDict) {
+  const root = queueRootForDay(dayStr);
+
+  // لو queue موجودة بالفعل -> متعيدش بنائها
+  const stateSnap = await db.ref(queueStateForDay(dayStr)).once("value");
+  const state = stateSnap.val();
+  if (state?.built) {
+    console.log("✅ Arabic queue already built for today → skip build");
+    return;
+  }
+
+  const updates = {};
+  let missingCount = 0;
+
+  for (const t of teams || []) {
+    if (!t?.id) continue;
+    // لو متترجمش قبل كده
+    if (!existingDict?.[t.id]?.ar) {
+      updates[`${root}/${t.id}`] = true;
+      missingCount++;
+    }
+  }
+
+  if (missingCount > 0) {
+    await db.ref().update(updates);
+  }
+
+  await db.ref(queueStateForDay(dayStr)).set({
+    built: true,
+    done: missingCount === 0,
+    remaining: missingCount,
+    updated_at: new Date().toISOString(),
+  });
+
+  console.log(`🧩 Arabic queue built: missing=${missingCount}`);
+}
+
+// Read next batch (limit 20) from queue
+async function readArabicQueueBatch(dayStr, limit = 20) {
+  const root = queueRootForDay(dayStr);
+  const snap = await db.ref(root).orderByKey().limitToFirst(limit).once("value");
+  const val = snap.val() || {};
+  const ids = Object.keys(val);
+  return ids;
+}
+
+async function removeFromArabicQueue(dayStr, ids) {
+  if (!ids?.length) return;
+  const root = queueRootForDay(dayStr);
+  const updates = {};
+  for (const id of ids) updates[`${root}/${id}`] = null;
+  await db.ref().update(updates);
+}
+
+// Translate a batch by using teams_index names (EN) + Wikidata
+async function translateArabicBatch(dayStr, ids, dict) {
+  if (!ids?.length) return { tried: 0, added: 0, failed: 0 };
+
+  // هات أسماء EN من teams_index
+  const indexSnap = await db.ref("teams_index").once("value");
+  const index = indexSnap.val() || {};
+
+  const teamsBatch = ids
+    .map((id) => {
+      const en = index?.[id]?.en;
+      if (!en) return null;
+      return { id, en };
+    })
+    .filter(Boolean);
+
+  if (!teamsBatch.length) {
+    // مفيش أسماء EN -> نشيلهم من queue عشان مايتكرروش
+    await removeFromArabicQueue(dayStr, ids);
+    return { tried: ids.length, added: 0, failed: ids.length };
+  }
+
+  const enToAr = await fetchWikidataArabicLabelsBatch(teamsBatch);
+
+  const nowIso = new Date().toISOString();
+  const updates = {};
+  let added = 0;
+  let failed = 0;
+
+  for (const t of teamsBatch) {
+    // لو اتترجم قبل كده خلاص
+    if (dict?.[t.id]?.ar) continue;
+
+    const ar = enToAr.get(t.en);
+    if (ar) {
+      updates[`dict/teams_ar/${t.id}`] = {
+        ar,
+        en: t.en,
+        source: "wikidata",
+        updated_at: nowIso,
+      };
+      added++;
+    } else {
+      // سجل الفشل مرة واحدة (عشان مايتكرر)
+      updates[`dict/teams_ar_fail/${t.id}`] = {
+        en: t.en,
+        updated_at: nowIso,
+      };
+      failed++;
+    }
+  }
+
+  if (Object.keys(updates).length) {
+    await db.ref().update(updates);
+  }
+
+  // شيل كل IDs اللي حاولنا عليهم من queue (نجح/فشل) → لا إعادة
+  await removeFromArabicQueue(dayStr, ids);
+
+  return { tried: ids.length, added, failed };
+}
+
+// After each run update queue state (done/remaining)
+async function refreshArabicQueueState(dayStr) {
+  const root = queueRootForDay(dayStr);
+  const snap = await db.ref(root).once("value");
+  const val = snap.val() || {};
+  const remaining = Object.keys(val).length;
+
+  await db.ref(queueStateForDay(dayStr)).update({
+    done: remaining === 0,
+    remaining,
+    updated_at: new Date().toISOString(),
+  });
+
+  return remaining;
+}
+
+// Main: process 20 teams per run until done
+async function processArabicQueueIfNeeded(dayStr) {
+  const stateSnap = await db.ref(queueStateForDay(dayStr)).once("value");
+  const state = stateSnap.val();
+
+  if (!state?.built) {
+    console.log("ℹ️ Arabic queue not built yet → skip");
+    return { skipped: true };
+  }
+  if (state?.done) {
+    console.log("✅ Arabic queue done → no Wikidata calls");
+    return { skipped: true };
+  }
+
+  const dict = await readTeamsArDict();
+  const ids = await readArabicQueueBatch(dayStr, 10);
+
+  if (!ids.length) {
+    const remaining = await refreshArabicQueueState(dayStr);
+    console.log(`✅ Arabic queue empty now (remaining=${remaining})`);
+    return { skipped: true };
+  }
+
+  console.log(`🌍 Arabic batch: translating ${ids.length} teams...`);
+  const res = await translateArabicBatch(dayStr, ids, dict);
+  const remaining = await refreshArabicQueueState(dayStr);
+
+  console.log(`✅ Arabic batch done: tried=${res.tried}, added=${res.added}, failed=${res.failed}, remaining=${remaining}`);
+  return { skipped: false, ...res, remaining };
+}
+
 // ====== Helpers to ensure Tomorrow exists even if full refresh didn't run ======
 
 async function readDbOnce(path) {
   const snap = await db.ref(path).once("value");
   return snap.val();
 }
+
+function stripAr(name) {
+  const parts = String(name || "").split(" | ");
+  return parts.length === 2 ? parts[1] : String(name || "");
+}
+
+async function rewriteStoredMatchesWithDict(path, dict) {
+  const data = await readDbOnce(path);
+  if (!data || typeof data !== "object") return false;
+
+  for (const leagueKey of Object.keys(data)) {
+    const league = data[leagueKey];
+    const matches = league?.matches || [];
+
+    for (const m of matches) {
+      if (m?.home_id) m.home_team = teamDisplayName(m.home_id, stripAr(m.home_team), dict);
+      if (m?.away_id) m.away_team = teamDisplayName(m.away_id, stripAr(m.away_team), dict);
+    }
+  }
+
+  await db.ref(path).set(data);
+  return true;
+}
+
 
 function isTomorrowDataMissing(tomorrowData) {
   // لو null/undefined أو object فاضي
@@ -655,47 +821,41 @@ async function ensureTomorrowFetched(tomorrowStr) {
   // ============================
   // 1) أول رن في اليوم → اسحب 3 أيام مرة واحدة
   // ============================
- if (needsFullRefresh) {
+if (needsFullRefresh) {
   console.log("🌙 New day detected → fetching Yesterday/Today/Tomorrow (once)");
 
-  // 1) Fetch raw fixtures (API-Football) مرة واحدة لكل يوم
+  // 1) API-Football: 3 calls
   const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
   const yFixtures = await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
   const tFixtures = await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-  // 2) Build matches_time لليوم فقط (زي ما عندك)
+  // 2) matches_time لليوم
   await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
 
-  // 3) Collect teams from ALL 3 days (عشان العربي يظهر في كل التلاتة)
+  // 3) collect teams (3 أيام) + uniqueTeams
   const allTeams = [
     ...extractTeams(todayFixtures),
     ...extractTeams(yFixtures),
     ...extractTeams(tFixtures),
   ];
 
-  // Unique by id
   const uniq = new Map();
   for (const t of allTeams) uniq.set(t.id, t);
   const uniqueTeams = Array.from(uniq.values());
 
-  // 4) Store teams_index (مجاني، بدون API إضافي)
+  // 4) teams_index (عشان الترجمة بالـ queue تعتمد عليه)
   await upsertTeamsIndex(uniqueTeams);
 
-  // 5) Read dict + best-effort sync from Wikidata (لو فشل مش هنوقف)
+  // 5) dict الحالي (موجود مترجم قبل كده)
   const existing = await readTeamsArDict();
-  const { dict } = await syncTeamsArabicFromWikidata(uniqueTeams, existing);
 
-  // 6) Rewrite 3 days with AR|EN (بدون أي طلب API-Football إضافي)
-  // بدل ما نعيد سحب API، هنستغل إن fetchByDate رجّعت response؟
-  // حاليا fetchByDate بترجع response فقط، لكنها كمان بتكتب للـDB.
-  // عشان نكتب AR|EN لازم نعيد كتابة الـDB من نفس fixtures:
-  // أسهل حل: ننادي fetchByDate مرة تانية "لكن ده هيعمل API call" ❌
-  // فهنعمل Function صغيرة تكتب grouped من fixtures نفسها.
+  // 6) ابنِ queue من الناقص (مرة واحدة فقط في اليوم)
+  await buildArabicQueueForDay(todayStr, uniqueTeams, existing);
 
-  // هنستخدم حل بسيط: نعمل writer من fixtures للـDB (بدون API)
-  await writeFixturesToDb(todayFixtures, "matches_today", "Today", dict);
-  await writeFixturesToDb(yFixtures, "matches_yesterday", "Yesterday", dict);
-  await writeFixturesToDb(tFixtures, "matches_tomorrow", "Tomorrow", dict);
+  // 7) اكتب الـ DB بـ الموجود من الترجمات فقط
+  await writeFixturesToDb(todayFixtures, "matches_today", "Today", existing);
+  await writeFixturesToDb(yFixtures, "matches_yesterday", "Yesterday", existing);
+  await writeFixturesToDb(tFixtures, "matches_tomorrow", "Tomorrow", existing);
 
   await db.ref("meta/today").set({
     date: todayStr,
@@ -708,6 +868,18 @@ async function ensureTomorrowFetched(tomorrowStr) {
 }
 
 const tomorrowFetched = await ensureTomorrowFetched(tomorrow);
+
+// ✅ Continue Arabic translations gradually (20 per run) until done
+const arRun = await processArabicQueueIfNeeded(todayStr);
+const arabicDidWork = !arRun?.skipped; // true لو ترجم دفعة
+
+if (arabicDidWork) {
+  const dictAfter = await readTeamsArDict();
+  await rewriteStoredMatchesWithDict("matches_today", dictAfter);
+  await rewriteStoredMatchesWithDict("matches_yesterday", dictAfter);
+  await rewriteStoredMatchesWithDict("matches_tomorrow", dictAfter);
+}
+   
 
  // ============================
 // 2) باقي اليوم → اسحب اليوم فقط (بس لو في ماتش قريب/داخل نافذة التحديث)
@@ -726,8 +898,8 @@ const yesterdayActive = hasActiveMatchesInDb(yData);
 const shouldFetchToday = shouldFetchNowFromMatchesTime(matchesTime, now);
 
 // 3) لو لا اليوم ولا الأمس محتاجين تحديث → وقف
-if (!shouldFetchToday && !yesterdayActive && !tomorrowFetched) {
-  console.log("🛑 No live/near matches today, yesterday finished, and tomorrow already exists → skipping API call");
+if (!shouldFetchToday && !yesterdayActive && !tomorrowFetched && !arabicDidWork) {
+  console.log("🛑 Nothing to do (no matches + no arabic work) → exit");
   process.exit(0);
 }
 
