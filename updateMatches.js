@@ -357,7 +357,7 @@ function hasLiveMatches(fixturesResponseArray) {
 
 /* ====== core job نسحب التيم من ال  ====== */
 
-const CRON_INTERVAL_MIN = 15;
+const CRON_INTERVAL_MIN = Number(process.env.CRON_INTERVAL_MIN || 15);
 const CRON_INTERVAL_MS = CRON_INTERVAL_MIN * 60 * 1000;
 
 async function writeCronMeta({ status, reason, extra = {} }) {
