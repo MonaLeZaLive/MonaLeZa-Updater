@@ -181,9 +181,8 @@ function sortMatches(matches) {
 /* ====== لليوم المطلوب (Fixtures) تسحب التجيزات ====== */
 async function fetchByDate(date, path, label) {
   const res = await api.get("/fixtures", {
-   params: { date, timezone: "Africa/Cairo" }
-
-  });
+  params: { from: date, to: date, timezone: "Africa/Cairo" }
+});
 
   const grouped = {};
   const logger = {
@@ -191,6 +190,10 @@ async function fetchByDate(date, path, label) {
     totalMatches: 0,
   };
 
+console.log(`[API] ${label} ${date} status:`, res.status);
+console.log(`[API] results:`, res.data?.results);
+console.log(`[API] errors:`, res.data?.errors);
+   
 /* ====== المسؤول عن عدم دخول اي مباراه من خارج الفلتر ====== */
   res.data.response.forEach((m) => {
    const league = LEAGUES[m.league.id];
@@ -301,7 +304,7 @@ function normalizeMatchesTime(raw) {
 }
 
 // بيرجع true لو فيه ماتش دلوقتي (تقريبًا) أو داخل خلال PRE_START_MIN
-function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo, todayStr) {
+function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo) {
   const PRE_START_MIN = 0;     // لو عايز قبل المباراة بكام دقيقة (مثلاً 10) خليها 10
   const MATCH_WINDOW_MIN = 160; // 2س 40د تقريبًا (زود/قلل براحتك)
 
@@ -334,66 +337,155 @@ function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo, todayStr) {
   return false;
 }
 
+// الحالات اللي نعتبرها "ماتش شغال فعليًا"
+const ACTIVE_STATUSES = new Set([
+  "1H",  // الشوط الأول
+  "2H",  // الشوط الثاني
+  "HT",  // استراحة
+  "ET",  // وقت إضافي
+  "P",   // ركلات ترجيح
+  "BT",  // استراحة قبل الإضافي
+  "LIVE" // لو API بيرجع LIVE مباشرة
+]);
+
+function hasLiveMatches(fixturesResponseArray) {
+  const filtered = fixturesResponseArray.filter(
+    (m) => LEAGUES[m.league?.id]
+  );
+
+  return filtered.some((m) =>
+    ACTIVE_STATUSES.has(m.fixture?.status?.short)
+  );
+}
+
+/* ====== core job نسحب التيم من ال  ====== */
+
+const CRON_INTERVAL_MIN = Number(process.env.CRON_INTERVAL_MIN || 15);
+const CRON_INTERVAL_MS = CRON_INTERVAL_MIN * 60 * 1000;
+
+async function writeCronMeta({ status, reason, extra = {} }) {
+  const nowMs = Date.now();
+  const nextRunAt = nowMs + CRON_INTERVAL_MS;
+
+  await db.ref("meta/cron").set({
+    interval_min: CRON_INTERVAL_MIN,
+    last_run_at: nowMs,
+    next_run_at: nextRunAt,
+
+    status,          // "ok" | "skip" | "error"
+    reason: reason || "",
+
+    ...extra,
+  });
+}
 
 /* ====== تنظبم ====== */
 
 (async () => {
-  const now = dayjs().tz("Africa/Cairo");
+  try {
+    const now = dayjs().tz("Africa/Cairo");
 
-  const todayStr = now.format("YYYY-MM-DD");
-  const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
-  const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
+    const todayStr = now.format("YYYY-MM-DD");
+    const yesterday = now.subtract(1, "day").format("YYYY-MM-DD");
+    const tomorrow = now.add(1, "day").format("YYYY-MM-DD");
 
-  // ✅ نقرأ meta علشان نضمن إن 3 أيام تتسحب مرة واحدة بس (أول رن في اليوم)
-  const metaSnap = await db.ref("meta/today").once("value");
-  const meta = metaSnap.val();
+    const metaSnap = await db.ref("meta/today").once("value");
+    const meta = metaSnap.val();
 
-  const needsFullRefresh = !meta?.date || meta.date !== todayStr;
+    const needsFullRefresh = !meta?.date || meta.date !== todayStr;
 
-  // ============================
-  // 1) أول رن في اليوم → اسحب 3 أيام مرة واحدة
-  // ============================
-  if (needsFullRefresh) {
-    console.log("🌙 New day detected → fetching Yesterday/Today/Tomorrow (once)");
+    // 1) أول رن في اليوم
+    if (needsFullRefresh) {
+      console.log("🌙 New day detected → fetching Yesterday/Today/Tomorrow (once)");
 
-   const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
-await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
-await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
+      const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+      const yesterdayFixtures = await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+      await fetchByDate(tomorrow, "matches_tomorrow", "Tomorrow");
 
-// ✅ matches_time لليوم فقط
-await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
+     await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures) || []);
 
+      const yesterdayActive = hasLiveMatches(yesterdayFixtures);
 
-    await db.ref("meta/today").set({
-      date: todayStr,
-      updated_at: new Date().toISOString(),
-      today_matches_count: todayFixtures?.length ?? 0,
+      await db.ref("meta/today").set({
+        date: todayStr,
+        updated_at: new Date().toISOString(),
+        today_matches_count: todayFixtures?.length ?? 0,
+        yesterday_active: yesterdayActive,
+      });
+
+      await writeCronMeta({
+        status: "ok",
+        reason: "full_refresh",
+        extra: {
+          today: todayStr,
+          yesterday_active: yesterdayActive,
+        },
+      });
+
+      console.log("✅ Full refresh done");
+      process.exit(0);
+    }
+
+    // 2) باقي اليوم
+
+    // (A) تحديث أمس لو لسه active
+    if (meta?.yesterday_active) {
+      console.log("⏳ Yesterday still active → fetching YESTERDAY update");
+      const yFixtures = await fetchByDate(yesterday, "matches_yesterday", "Yesterday");
+
+      const stillActive = hasLiveMatches(yFixtures);
+      await db.ref("meta/today/yesterday_active").set(stillActive);
+
+      // optional: تحديث وقت آخر تحديث
+      await db.ref("meta/today/updated_at").set(new Date().toISOString());
+
+      if (!stillActive) {
+        console.log("✅ Yesterday finished → stop fetching yesterday from now on");
+      }
+    }
+
+    // (B) قرار تحديث اليوم
+    const mtSnap = await db.ref("matches_time").once("value");
+    const matchesTime = mtSnap.val();
+
+    const shouldFetch = shouldFetchNowFromMatchesTime(matchesTime, now);
+
+    if (!shouldFetch) {
+      await writeCronMeta({
+        status: "skip",
+        reason: "no_live_or_near_today_matches",
+        extra: { today: todayStr },
+      });
+
+      console.log("🛑 No live/near matches now → skipping TODAY API call");
+      process.exit(0);
+    }
+
+    console.log("🔥 Match window active → fetching TODAY");
+    const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
+    await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures) || []);
+
+    await db.ref("meta/today/updated_at").set(new Date().toISOString());
+
+    await writeCronMeta({
+      status: "ok",
+      reason: "live_update_today",
+      extra: {
+        today: todayStr,
+        today_matches_count: todayFixtures?.length ?? 0,
+      },
     });
 
-    console.log("✅ Full refresh done");
+    console.log("✅ Live update done");
     process.exit(0);
+  } catch (err) {
+    console.error("❌ Cron job crashed:", err?.message || err);
+
+    await writeCronMeta({
+      status: "error",
+      reason: err?.message || "unknown_error",
+    });
+
+    process.exit(1);
   }
-
- // ============================
-// 2) باقي اليوم → اسحب اليوم فقط (بس لو في ماتش قريب/داخل نافذة التحديث)
-// ============================
-
-// اقرأ matches_time من Firebase
-const mtSnap = await db.ref("matches_time").once("value");
-const matchesTime = mtSnap.val();
-
-// القرار: نسحب API ولا لا؟
-const shouldFetch = shouldFetchNowFromMatchesTime(matchesTime, now, todayStr);
-
-if (!shouldFetch) {
-  console.log("🛑 No live/near matches now → skipping API call");
-  process.exit(0);
-}
-
-console.log("🔥 Match window active → fetching TODAY");
-const todayFixtures = await fetchByDate(todayStr, "matches_today", "Today");
-await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures));
-
-console.log("✅ Live update done");
-process.exit(0);
 })();
