@@ -88,36 +88,163 @@ async function fetchFixturesByDate(dateStr, label) {
 }
 
 /* ============================
+     خريطة البطولات LEAGUES
+============================ */
+const LEAGUES = {
+  // 🌍 International
+  1:  { ar: "كأس العالم", en: "World Cup" },
+  2:  { ar: "دوري أبطال أوروبا", en: "UEFA Champions League" },
+  3:  { ar: "الدوري الأوروبي", en: "UEFA Europa League" },
+  4:  { ar: "بطولة أمم أوروبا", en: "Euro Championship" }, 
+  5:  { ar: "دوري الأمم الأوروبية", en: "UEFA Nations League" },
+  9:  { ar: "كوبا أمريكا", en: "Copa America" },
+  848:{ ar: "دوري مؤتمر أمم أوروبا", en: "UEFA Europa Conference League" },
+  36: { ar: "تصفيات كأس أمم أفريقيا", en: "Africa Cup of Nations - Qualification" }, 
+  6:  { ar: "كأس الأمم الإفريقية", en: "Africa Cup of Nations" },
+  538:{ ar: "كأس الأمم الإفريقية تحت 20 سنة", en: "Africa Cup of Nations U20" },
+  12: { ar: "دوري أبطال أفريقيا", en: "CAF Champions League" },
+  20: { ar: "كأس الكونفدرالية الأفريقية", en: "CAF Confederation Cup" },
+  533:{ ar: "كأس السوبر الأفريقي", en: "CAF Super Cup" },
+  17: { ar: "دوري أبطال آسيا", en: "AFC Champions League" },
+  1168: { ar: "كأس القارات للأندية", en: "FIFA Intercontinental Cup" },
+  15: { ar: "كأس العالم للأندية", en: "FIFA Club World Cup" },
+  13: { ar: "كأس ليبرتادوريس ", en: "Copa Libertadores" },
+  200:{ ar: "بطولة الدوري الإفريقي", en: "African Football League" },
+  7:  { ar: "كأس آسيا للمنتخبات", en: "AFC Asian Cup" },
+
+  // 🇬🇧 England
+  39: { ar: "الدوري الإنجليزي", en: "Premier League" },
+  45: { ar: "كأس الاتحاد الإنجليزي", en: "FA Cup" },
+  48: { ar: "كأس كاراباو", en: "EFL Cup" },
+  528:{ ar: "كأس السوبر الإنجليزي", en: "FA Community Shield" },
+
+  // 🇪🇸 Spain
+  140:{ ar: "الدوري الإسباني", en: "La Liga" },
+  143:{ ar: "كأس إسبانيا", en: "Copa del Rey" },
+  556:{ ar: "كأس السوبر الإسباني", en: "Spanish Super Cup" },
+
+  // 🇮🇹 Italy
+  135:{ ar: "الدوري الإيطالي", en: "Serie A" },
+  137:{ ar: "كأس إيطاليا", en: "Coppa Italia" },
+  547:{ ar: "كأس السوبر الإيطالي", en: "Italian Super Cup" },
+
+  // 🇩🇪 Germany
+  78: { ar: "الدوري الألماني", en: "Bundesliga" },
+  81: { ar: "كأس ألمانيا", en: "DFB Pokal" },
+  529:{ ar: "كأس السوبر الألماني", en: "German Super Cup" },
+
+  // 🇫🇷 France
+  61: { ar: "الدوري الفرنسي", en: "Ligue 1" },
+  66: { ar: "كأس فرنسا", en: "Coupe de France" },
+  526:{ ar: "كأس السوبر الفرنسي", en: "French Super Cup" },
+
+  // 🇸🇦 Saudi
+  307:{ ar: "الدوري السعودي", en: "Saudi Pro League" },
+  308:{ ar: "كأس خادم الحرمين الشريفين", en: "King's Cup" },
+  309:{ ar: "كأس السوبر السعودي", en: "Saudi Super Cup" },
+
+  // 🇪🇬 Egypt
+  233:{ ar: "الدوري المصري", en: "Egyptian League" },
+  714:{ ar: "كأس مصر", en: "Egypt Cup" },
+  539:{ ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
+};
+/* ============================
+    نهاية خريطة البطولات LEAGUES
+============================ */
+/* ============================
+ ترتيب عرض البطولات LEAGUE_ORDER
+============================ */
+const LEAGUE_ORDER = [
+  /* 🌍 National Teams */
+  "World Cup",
+  "FIFA Club World Cup",
+  "FIFA Intercontinental Cup", 
+  "Euro Championship", 
+  "UEFA Nations League", 
+  "Copa America", 
+  "Africa Cup of Nations - Qualification", 
+  "Africa Cup of Nations", 
+  "AFC Asian Cup", 
+  "Africa Cup of Nations U20",  
+
+  /* 🌍 Continental / International Leagues */
+  "UEFA Champions League",
+  "CAF Champions League",
+  "AFC Champions League",
+  "Copa Libertadores", 
+  "UEFA Europa League",
+  "CAF Confederation Cup",
+  "UEFA Europa Conference League", 
+  "African Football League",
+
+  /* 🏆 Leagues (Domestic) */
+  "Premier League",
+  "La Liga",
+  "Serie A",
+  "Bundesliga",
+  "Ligue 1",
+  "Egyptian League", 
+  "Saudi Pro League",
+   
+  /* 🏆 Cups */
+  "FA Cup",
+  "EFL Cup",
+  "Copa del Rey",
+  "Coppa Italia",
+  "DFB Pokal",
+  "Coupe de France",
+  "Egypt Cup",
+  "King's Cup",
+   
+  /* 🛡 Super Cups */ 
+  "CAF Super Cup", 
+  "FA Community Shield",
+  "Spanish Super Cup",
+  "Italian Super Cup",
+  "German Super Cup",
+  "French Super Cup",
+  "Egyptian Super Cup",
+  "Saudi Super Cup",
+
+];
+/* ============================
+نهاية ترتيب عرض البطولات LEAGUE_ORDER
+============================ */
+
+/* ============================
    Group fixtures by League
    (No filters)
 ============================ */
 function groupFixtures(fixtures) {
   const grouped = {};
+  const logger = { totalMatches: 0, dropped: 0, leagues: {} };
 
   fixtures.forEach((m) => {
-    const leagueId = m.league?.id ?? "unknown";
-    const leagueName = m.league?.name ?? "Unknown League";
-    const leagueLogo = m.league?.logo ?? "";
+    const leagueId = m.league?.id;
 
-    // stable key = league id
-    const leagueKey = String(leagueId);
+    // ✅ فلترة صارمة: أي بطولة مش موجودة في LEAGUES تتشال
+    const leagueMap = LEAGUES[leagueId];
+    if (!leagueMap) {
+      logger.dropped += 1;
+      return;
+    }
 
+    const leagueKey = leagueMap.en; // ✅ المفتاح بالاسم الإنجليزي علشان ORDER يشتغل
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
         league_id: leagueId,
-        league_name_ar: leagueName,
-        league_name_en: leagueName,
-        league_logo: leagueLogo,
+        league_name_ar: leagueMap.ar,
+        league_name_en: leagueMap.en,
+        league_logo: m.league?.logo ?? "",
         matches: [],
       };
+      logger.leagues[leagueKey] = 0;
     }
 
     grouped[leagueKey].matches.push({
       id: m.fixture?.id ?? null,
-
       status: m.fixture?.status?.short || "NS",
       minute: m.fixture?.status?.elapsed ?? null,
-
       time: m.fixture?.date
         ? dayjs(m.fixture.date).tz("Africa/Cairo").format("HH:mm")
         : "—",
@@ -131,12 +258,42 @@ function groupFixtures(fixtures) {
       away_score: m.goals?.away ?? null,
 
       stadium: m.fixture?.venue?.name ?? "—",
+      channel: m.tv_channel || "—", // لو مش موجودة هتطلع —
     });
+
+    logger.leagues[leagueKey] += 1;
+    logger.totalMatches += 1;
   });
 
-  return grouped;
+  // ✅ ترتيب البطولات حسب LEAGUE_ORDER
+  const ordered = {};
+  LEAGUE_ORDER.forEach((name) => {
+    if (grouped[name]) ordered[name] = grouped[name];
+  });
+
+  // ✅ لو في بطولة موجودة في الفلتر بس مش موجودة في ORDER لأي سبب
+  Object.keys(grouped).forEach((name) => {
+    if (!ordered[name]) ordered[name] = grouped[name];
+  });
+
+  console.log(
+    `📌 Filtered matches: kept=${logger.totalMatches} dropped=${logger.dropped} leagues=${Object.keys(
+      ordered
+    ).length}`
+  );
+
+function sortMatches(matches) {
+  const priority = { LIVE: 1, "1H": 1, "2H": 1, HT: 1, ET: 1, PEN: 1, NS: 2, FT: 3 };
+  return matches.sort((a, b) => (priority[a.status] || 9) - (priority[b.status] || 9));
 }
 
+// بعد ما نعمل ordered:
+Object.values(ordered).forEach((league) => {
+  league.matches = sortMatches(league.matches);
+});
+   
+  return ordered;
+}
 /* ============================
    Write grouped data to Firebase
 ============================ */
