@@ -1,14 +1,15 @@
 /* =========================================================
-   MonaLeZa Live - Clean Cron (No Filters)
+   MonaLeZa Live - Clean Cron
    - Fetch fixtures by DATE (API-Football requirement)
-   - Group by league (no filtering / no ordering)
-   - Write to Firebase Realtime Database:
+   - Filter leagues by LEAGUES map (strict)
+   - Order leagues by LEAGUE_ORDER
+   - Order matches inside league (LIVE -> NS -> FT)
+   - Write to Firebase:
        matches_today
        matches_yesterday
        matches_tomorrow
        meta/today
-       meta/cron
-   - Timer interval comes from ENV: CRON_INTERVAL_MIN
+       meta/cron   (interval auto-detected from previous run)
    ========================================================= */
 
 import axios from "axios";
@@ -44,17 +45,28 @@ const api = axios.create({
 });
 
 /* ============================
-   Cron Meta (Timer)
+   Cron Meta (Auto Interval)
+   - Computes interval from prev last_run_at
+   - First run uses fallback (12h)
 ============================ */
-const CRON_INTERVAL_MIN = Number(process.env.CRON_INTERVAL_MIN || 15);
-const CRON_INTERVAL_MS = CRON_INTERVAL_MIN * 60 * 1000;
+const FALLBACK_INTERVAL_MIN = Number(process.env.CRON_FALLBACK_MIN || 720);
 
 async function writeCronMeta({ status, reason, extra = {} }) {
   const nowMs = Date.now();
-  const nextRunAt = nowMs + CRON_INTERVAL_MS;
+
+  const prevSnap = await db.ref("meta/cron/last_run_at").once("value");
+  const prevLastRunAt = Number(prevSnap.val() || 0);
+
+  const intervalMs =
+    prevLastRunAt > 0
+      ? Math.max(60_000, nowMs - prevLastRunAt) // minimum 1 minute
+      : FALLBACK_INTERVAL_MIN * 60 * 1000;
+
+  const intervalMin = Math.round(intervalMs / 60000);
+  const nextRunAt = nowMs + intervalMs;
 
   await db.ref("meta/cron").set({
-    interval_min: CRON_INTERVAL_MIN,
+    interval_min: intervalMin,
     last_run_at: nowMs,
     next_run_at: nextRunAt,
     status, // "ok" | "error"
@@ -65,7 +77,6 @@ async function writeCronMeta({ status, reason, extra = {} }) {
 
 /* ============================
    Fetch fixtures by DATE
-   (No from/to — API needs extra params with from/to)
 ============================ */
 async function fetchFixturesByDate(dateStr, label) {
   const res = await api.get("/fixtures", {
@@ -78,7 +89,6 @@ async function fetchFixturesByDate(dateStr, label) {
   console.log(`[API] ${label} date=${dateStr} status=${res.status}`);
   console.log(`[API] ${label} results=${res.data?.results ?? "?"}`);
 
-  // API sometimes returns 200 even if errors exist, so we must check errors.
   const errors = res.data?.errors || {};
   if (errors && Object.keys(errors).length) {
     console.log(`[API] ${label} errors:`, errors);
@@ -88,105 +98,99 @@ async function fetchFixturesByDate(dateStr, label) {
 }
 
 /* ============================
-     خريطة البطولات LEAGUES
+     LEAGUES FILTER MAP
 ============================ */
 const LEAGUES = {
   // 🌍 International
-  1:  { ar: "كأس العالم", en: "World Cup" },
-  2:  { ar: "دوري أبطال أوروبا", en: "UEFA Champions League" },
-  3:  { ar: "الدوري الأوروبي", en: "UEFA Europa League" },
-  4:  { ar: "بطولة أمم أوروبا", en: "Euro Championship" }, 
-  5:  { ar: "دوري الأمم الأوروبية", en: "UEFA Nations League" },
-  9:  { ar: "كوبا أمريكا", en: "Copa America" },
-  848:{ ar: "دوري مؤتمر أمم أوروبا", en: "UEFA Europa Conference League" },
-  36: { ar: "تصفيات كأس أمم أفريقيا", en: "Africa Cup of Nations - Qualification" }, 
-  6:  { ar: "كأس الأمم الإفريقية", en: "Africa Cup of Nations" },
-  538:{ ar: "كأس الأمم الإفريقية تحت 20 سنة", en: "Africa Cup of Nations U20" },
+  1: { ar: "كأس العالم", en: "World Cup" },
+  2: { ar: "دوري أبطال أوروبا", en: "UEFA Champions League" },
+  3: { ar: "الدوري الأوروبي", en: "UEFA Europa League" },
+  4: { ar: "بطولة أمم أوروبا", en: "Euro Championship" },
+  5: { ar: "دوري الأمم الأوروبية", en: "UEFA Nations League" },
+  9: { ar: "كوبا أمريكا", en: "Copa America" },
+  848: { ar: "دوري مؤتمر أمم أوروبا", en: "UEFA Europa Conference League" },
+  36: { ar: "تصفيات كأس أمم أفريقيا", en: "Africa Cup of Nations - Qualification" },
+  6: { ar: "كأس الأمم الإفريقية", en: "Africa Cup of Nations" },
+  538: { ar: "كأس الأمم الإفريقية تحت 20 سنة", en: "Africa Cup of Nations U20" },
   12: { ar: "دوري أبطال أفريقيا", en: "CAF Champions League" },
   20: { ar: "كأس الكونفدرالية الأفريقية", en: "CAF Confederation Cup" },
-  533:{ ar: "كأس السوبر الأفريقي", en: "CAF Super Cup" },
+  533: { ar: "كأس السوبر الأفريقي", en: "CAF Super Cup" },
   17: { ar: "دوري أبطال آسيا", en: "AFC Champions League" },
   1168: { ar: "كأس القارات للأندية", en: "FIFA Intercontinental Cup" },
   15: { ar: "كأس العالم للأندية", en: "FIFA Club World Cup" },
-  13: { ar: "كأس ليبرتادوريس ", en: "Copa Libertadores" },
-  200:{ ar: "بطولة الدوري الإفريقي", en: "African Football League" },
-  7:  { ar: "كأس آسيا للمنتخبات", en: "AFC Asian Cup" },
+  13: { ar: "كأس ليبرتادوريس", en: "Copa Libertadores" },
+  200: { ar: "بطولة الدوري الإفريقي", en: "African Football League" },
+  7: { ar: "كأس آسيا للمنتخبات", en: "AFC Asian Cup" },
 
   // 🇬🇧 England
   39: { ar: "الدوري الإنجليزي", en: "Premier League" },
   45: { ar: "كأس الاتحاد الإنجليزي", en: "FA Cup" },
   48: { ar: "كأس كاراباو", en: "EFL Cup" },
-  528:{ ar: "كأس السوبر الإنجليزي", en: "FA Community Shield" },
+  528: { ar: "كأس السوبر الإنجليزي", en: "FA Community Shield" },
 
   // 🇪🇸 Spain
-  140:{ ar: "الدوري الإسباني", en: "La Liga" },
-  143:{ ar: "كأس إسبانيا", en: "Copa del Rey" },
-  556:{ ar: "كأس السوبر الإسباني", en: "Spanish Super Cup" },
+  140: { ar: "الدوري الإسباني", en: "La Liga" },
+  143: { ar: "كأس إسبانيا", en: "Copa del Rey" },
+  556: { ar: "كأس السوبر الإسباني", en: "Spanish Super Cup" },
 
   // 🇮🇹 Italy
-  135:{ ar: "الدوري الإيطالي", en: "Serie A" },
-  137:{ ar: "كأس إيطاليا", en: "Coppa Italia" },
-  547:{ ar: "كأس السوبر الإيطالي", en: "Italian Super Cup" },
+  135: { ar: "الدوري الإيطالي", en: "Serie A" },
+  137: { ar: "كأس إيطاليا", en: "Coppa Italia" },
+  547: { ar: "كأس السوبر الإيطالي", en: "Italian Super Cup" },
 
   // 🇩🇪 Germany
   78: { ar: "الدوري الألماني", en: "Bundesliga" },
   81: { ar: "كأس ألمانيا", en: "DFB Pokal" },
-  529:{ ar: "كأس السوبر الألماني", en: "German Super Cup" },
+  529: { ar: "كأس السوبر الألماني", en: "German Super Cup" },
 
   // 🇫🇷 France
   61: { ar: "الدوري الفرنسي", en: "Ligue 1" },
   66: { ar: "كأس فرنسا", en: "Coupe de France" },
-  526:{ ar: "كأس السوبر الفرنسي", en: "French Super Cup" },
+  526: { ar: "كأس السوبر الفرنسي", en: "French Super Cup" },
 
   // 🇸🇦 Saudi
-  307:{ ar: "الدوري السعودي", en: "Saudi Pro League" },
-  308:{ ar: "كأس خادم الحرمين الشريفين", en: "King's Cup" },
-  309:{ ar: "كأس السوبر السعودي", en: "Saudi Super Cup" },
+  307: { ar: "الدوري السعودي", en: "Saudi Pro League" },
+  308: { ar: "كأس خادم الحرمين الشريفين", en: "King's Cup" },
+  309: { ar: "كأس السوبر السعودي", en: "Saudi Super Cup" },
 
   // 🇪🇬 Egypt
-  233:{ ar: "الدوري المصري", en: "Egyptian League" },
-  714:{ ar: "كأس مصر", en: "Egypt Cup" },
-  539:{ ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
+  233: { ar: "الدوري المصري", en: "Egyptian League" },
+  714: { ar: "كأس مصر", en: "Egypt Cup" },
+  539: { ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
 };
+
 /* ============================
-    نهاية خريطة البطولات LEAGUES
-============================ */
-/* ============================
- ترتيب عرض البطولات LEAGUE_ORDER
+   LEAGUE ORDER
 ============================ */
 const LEAGUE_ORDER = [
-  /* 🌍 National Teams */
   "World Cup",
   "FIFA Club World Cup",
-  "FIFA Intercontinental Cup", 
-  "Euro Championship", 
-  "UEFA Nations League", 
-  "Copa America", 
-  "Africa Cup of Nations - Qualification", 
-  "Africa Cup of Nations", 
-  "AFC Asian Cup", 
-  "Africa Cup of Nations U20",  
+  "FIFA Intercontinental Cup",
+  "Euro Championship",
+  "UEFA Nations League",
+  "Copa America",
+  "Africa Cup of Nations - Qualification",
+  "Africa Cup of Nations",
+  "AFC Asian Cup",
+  "Africa Cup of Nations U20",
 
-  /* 🌍 Continental / International Leagues */
   "UEFA Champions League",
   "CAF Champions League",
   "AFC Champions League",
-  "Copa Libertadores", 
+  "Copa Libertadores",
   "UEFA Europa League",
   "CAF Confederation Cup",
-  "UEFA Europa Conference League", 
+  "UEFA Europa Conference League",
   "African Football League",
 
-  /* 🏆 Leagues (Domestic) */
   "Premier League",
   "La Liga",
   "Serie A",
   "Bundesliga",
   "Ligue 1",
-  "Egyptian League", 
+  "Egyptian League",
   "Saudi Pro League",
-   
-  /* 🏆 Cups */
+
   "FA Cup",
   "EFL Cup",
   "Copa del Rey",
@@ -195,9 +199,8 @@ const LEAGUE_ORDER = [
   "Coupe de France",
   "Egypt Cup",
   "King's Cup",
-   
-  /* 🛡 Super Cups */ 
-  "CAF Super Cup", 
+
+  "CAF Super Cup",
   "FA Community Shield",
   "Spanish Super Cup",
   "Italian Super Cup",
@@ -205,31 +208,45 @@ const LEAGUE_ORDER = [
   "French Super Cup",
   "Egyptian Super Cup",
   "Saudi Super Cup",
-
 ];
-/* ============================
-نهاية ترتيب عرض البطولات LEAGUE_ORDER
-============================ */
 
 /* ============================
-   Group fixtures by League
-   (No filters)
+   Sort matches inside league
+============================ */
+function sortMatches(matches) {
+  const priority = {
+    LIVE: 1,
+    "1H": 1,
+    "2H": 1,
+    HT: 1,
+    ET: 1,
+    PEN: 1,
+    NS: 2,
+    FT: 3,
+  };
+  return matches.sort((a, b) => (priority[a.status] || 9) - (priority[b.status] || 9));
+}
+
+/* ============================
+   Group + Filter + Order
 ============================ */
 function groupFixtures(fixtures) {
   const grouped = {};
-  const logger = { totalMatches: 0, dropped: 0, leagues: {} };
+  let kept = 0;
+  let dropped = 0;
 
   fixtures.forEach((m) => {
     const leagueId = m.league?.id;
-
-    // ✅ فلترة صارمة: أي بطولة مش موجودة في LEAGUES تتشال
     const leagueMap = LEAGUES[leagueId];
+
+    // ✅ strict filter
     if (!leagueMap) {
-      logger.dropped += 1;
+      dropped += 1;
       return;
     }
 
-    const leagueKey = leagueMap.en; // ✅ المفتاح بالاسم الإنجليزي علشان ORDER يشتغل
+    const leagueKey = leagueMap.en;
+
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
         league_id: leagueId,
@@ -238,16 +255,13 @@ function groupFixtures(fixtures) {
         league_logo: m.league?.logo ?? "",
         matches: [],
       };
-      logger.leagues[leagueKey] = 0;
     }
 
     grouped[leagueKey].matches.push({
       id: m.fixture?.id ?? null,
       status: m.fixture?.status?.short || "NS",
       minute: m.fixture?.status?.elapsed ?? null,
-      time: m.fixture?.date
-        ? dayjs(m.fixture.date).tz("Africa/Cairo").format("HH:mm")
-        : "—",
+      time: m.fixture?.date ? dayjs(m.fixture.date).tz("Africa/Cairo").format("HH:mm") : "—",
 
       home_team: m.teams?.home?.name ?? "—",
       home_logo: m.teams?.home?.logo ?? "",
@@ -258,58 +272,46 @@ function groupFixtures(fixtures) {
       away_score: m.goals?.away ?? null,
 
       stadium: m.fixture?.venue?.name ?? "—",
-      channel: m.tv_channel || "—", // لو مش موجودة هتطلع —
+      channel: "—", // API-Football ما بيرجعش قناة بشكل مباشر
     });
 
-    logger.leagues[leagueKey] += 1;
-    logger.totalMatches += 1;
+    kept += 1;
   });
 
-  // ✅ ترتيب البطولات حسب LEAGUE_ORDER
+  // sort matches inside each league
+  Object.values(grouped).forEach((l) => {
+    l.matches = sortMatches(l.matches);
+  });
+
+  // order leagues
   const ordered = {};
   LEAGUE_ORDER.forEach((name) => {
     if (grouped[name]) ordered[name] = grouped[name];
   });
 
-  // ✅ لو في بطولة موجودة في الفلتر بس مش موجودة في ORDER لأي سبب
+  // add any league not in order (safety)
   Object.keys(grouped).forEach((name) => {
     if (!ordered[name]) ordered[name] = grouped[name];
   });
 
   console.log(
-    `📌 Filtered matches: kept=${logger.totalMatches} dropped=${logger.dropped} leagues=${Object.keys(
-      ordered
-    ).length}`
+    `📌 Filtered matches: kept=${kept} dropped=${dropped} leagues=${Object.keys(ordered).length}`
   );
 
-function sortMatches(matches) {
-  const priority = { LIVE: 1, "1H": 1, "2H": 1, HT: 1, ET: 1, PEN: 1, NS: 2, FT: 3 };
-  return matches.sort((a, b) => (priority[a.status] || 9) - (priority[b.status] || 9));
-}
-
-// بعد ما نعمل ordered:
-Object.values(ordered).forEach((league) => {
-  league.matches = sortMatches(league.matches);
-});
-   
   return ordered;
 }
+
 /* ============================
-   Write grouped data to Firebase
+   Write to Firebase
 ============================ */
 async function writeMatches(path, fixtures, label) {
   const grouped = groupFixtures(fixtures);
-
   const leaguesCount = Object.keys(grouped).length;
-  const matchesCount = fixtures.length;
 
   await db.ref(path).set(grouped);
 
-  console.log(
-    `✅ Wrote ${label} -> path=${path} leagues=${leaguesCount} matches=${matchesCount}`
-  );
-
-  return { leaguesCount, matchesCount };
+  console.log(`✅ Wrote ${label} -> path=${path} leagues=${leaguesCount} matches=${fixtures.length}`);
+  return { leaguesCount, matchesCount: fixtures.length };
 }
 
 /* ============================
@@ -323,7 +325,6 @@ async function writeMatches(path, fixtures, label) {
     const yesterdayStr = now.subtract(1, "day").format("YYYY-MM-DD");
     const tomorrowStr = now.add(1, "day").format("YYYY-MM-DD");
 
-    // read meta/today to decide full refresh
     const metaSnap = await db.ref("meta/today").once("value");
     const meta = metaSnap.val();
     const needsFullRefresh = !meta?.date || meta.date !== todayStr;
@@ -347,11 +348,7 @@ async function writeMatches(path, fixtures, label) {
         tomorrow_matches_count: wT.matchesCount,
       });
 
-      await writeCronMeta({
-        status: "ok",
-        reason: "full_refresh",
-        extra: { today: todayStr },
-      });
+      await writeCronMeta({ status: "ok", reason: "full_refresh", extra: { today: todayStr } });
 
       console.log("✅ Full refresh done");
       process.exit(0);
@@ -366,33 +363,19 @@ async function writeMatches(path, fixtures, label) {
     await db.ref("meta/today/updated_at").set(new Date().toISOString());
     await db.ref("meta/today/today_matches_count").set(wToday.matchesCount);
 
-   const FALLBACK_INTERVAL_MIN = 720; // احتياطي (12 ساعة) لو أول مرة
+    await writeCronMeta({ status: "ok", reason: "today_refresh", extra: { today: todayStr } });
 
-async function writeCronMeta({ status, reason, extra = {} }) {
-  const nowMs = Date.now();
+    console.log("✅ Today refresh done");
+    process.exit(0);
+  } catch (err) {
+    console.error("❌ Updater crashed:", err?.message || err);
 
-  // ✅ اقرأ آخر run قبل ما تكتب الجديد
-  const prevSnap = await db.ref("meta/cron/last_run_at").once("value");
-  const prevLastRunAt = Number(prevSnap.val() || 0);
+    try {
+      await writeCronMeta({ status: "error", reason: err?.message || "unknown_error" });
+    } catch (e) {
+      console.error("❌ Failed to write meta/cron:", e?.message || e);
+    }
 
-  // ✅ لو في run قبل كده: احسب الفرق الحقيقي
-  const intervalMs =
-    prevLastRunAt > 0 ? Math.max(60_000, nowMs - prevLastRunAt) : FALLBACK_INTERVAL_MIN * 60 * 1000;
-
-  const intervalMin = Math.round(intervalMs / 60000);
-  const nextRunAt = nowMs + intervalMs;
-
-  await db.ref("meta/cron").set({
-    interval_min: intervalMin,
-    last_run_at: nowMs,
-    next_run_at: nextRunAt,
-
-    status,          // "ok" | "skip" | "error"
-    reason: reason || "",
-
-    ...extra,
-  });
-}
     process.exit(1);
   }
 })();
