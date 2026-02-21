@@ -1,18 +1,18 @@
 /* =========================================================
-   MonaLeZa Live - Clean Cron (+ matches_time logic)
+   MonaLeZa Live - Smart Cron Updater
    - Fetch fixtures by DATE (API-Football requirement)
    - Filter leagues by LEAGUES map (strict)
    - Order leagues by LEAGUE_ORDER
    - Order matches inside league (LIVE -> NS -> FT)
-   - matches_time: times of today's fixtures (for deciding if we fetch today)
-   - yesterday_active: keep fetching yesterday until no live matches
+   - Build matches_time (today only) to decide live-window fetch
+   - Yesterday update continues ONLY while yesterday_active=true
    - Write to Firebase:
        matches_today
        matches_yesterday
-       matches_tomorrow
-       matches_time
-       meta/today
-       meta/cron   (interval auto-detected from previous run)
+       matches_tomorrow (once per Cairo day)
+       matches_time     (today only)
+       meta/today       (date, counts, yesterday_active, updated_at)
+       meta/cron        (interval auto-detected from previous run)
    ========================================================= */
 
 import axios from "axios";
@@ -23,6 +23,8 @@ import admin from "firebase-admin";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
+const TZ = "Africa/Cairo";
 
 /* ============================
    Firebase Admin Init
@@ -42,13 +44,13 @@ const db = admin.database();
 ============================ */
 const api = axios.create({
   baseURL: "https://v3.football.api-sports.io",
-  headers: {
-    "x-apisports-key": process.env.API_FOOTBALL_KEY,
-  },
+  headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
 });
 
 /* ============================
    Cron Meta (Auto Interval)
+   - Computes interval from prev last_run_at
+   - First run uses fallback (12h)
 ============================ */
 const FALLBACK_INTERVAL_MIN = Number(process.env.CRON_FALLBACK_MIN || 720);
 
@@ -60,7 +62,7 @@ async function writeCronMeta({ status, reason, extra = {} }) {
 
   const intervalMs =
     prevLastRunAt > 0
-      ? Math.max(60_000, nowMs - prevLastRunAt) // minimum 1 minute
+      ? Math.max(60_000, nowMs - prevLastRunAt) // min 1 minute
       : FALLBACK_INTERVAL_MIN * 60 * 1000;
 
   const intervalMin = Math.round(intervalMs / 60000);
@@ -81,10 +83,7 @@ async function writeCronMeta({ status, reason, extra = {} }) {
 ============================ */
 async function fetchFixturesByDate(dateStr, label) {
   const res = await api.get("/fixtures", {
-    params: {
-      date: dateStr,
-      timezone: "Africa/Cairo",
-    },
+    params: { date: dateStr, timezone: TZ },
   });
 
   console.log(`[API] ${label} date=${dateStr} status=${res.status}`);
@@ -158,7 +157,7 @@ const LEAGUES = {
   714: { ar: "كأس مصر", en: "Egypt Cup" },
   539: { ar: "كأس السوبر المصري", en: "Egyptian Super Cup" },
 
-  // MOROCCAN (تأكد إن ده ID صحيح للـ API-Football)
+  // MOROCCAN (لو ده ID صح عندك)
   200: { ar: "الدوري المغربي", en: "Moroccan Pro League" },
 };
 
@@ -224,7 +223,6 @@ function sortMatches(matches) {
     HT: 1,
     ET: 1,
     PEN: 1,
-
     NS: 2,
     FT: 3,
   };
@@ -243,7 +241,7 @@ function groupFixtures(fixtures) {
     const leagueId = m.league?.id;
     const leagueMap = LEAGUES[leagueId];
 
-    // ✅ strict filter
+    // strict filter
     if (!leagueMap) {
       dropped += 1;
       return;
@@ -265,7 +263,7 @@ function groupFixtures(fixtures) {
       id: m.fixture?.id ?? null,
       status: m.fixture?.status?.short || "NS",
       minute: m.fixture?.status?.elapsed ?? null,
-      time: m.fixture?.date ? dayjs(m.fixture.date).tz("Africa/Cairo").format("HH:mm") : "—",
+      time: m.fixture?.date ? dayjs(m.fixture.date).tz(TZ).format("HH:mm") : "—",
 
       home_team: m.teams?.home?.name ?? "—",
       home_logo: m.teams?.home?.logo ?? "",
@@ -282,18 +280,12 @@ function groupFixtures(fixtures) {
     kept += 1;
   });
 
-  // sort matches inside each league
-  Object.values(grouped).forEach((l) => {
-    l.matches = sortMatches(l.matches);
-  });
+  Object.values(grouped).forEach((l) => (l.matches = sortMatches(l.matches)));
 
-  // order leagues
   const ordered = {};
   LEAGUE_ORDER.forEach((name) => {
     if (grouped[name]) ordered[name] = grouped[name];
   });
-
-  // add any league not in order (safety)
   Object.keys(grouped).forEach((name) => {
     if (!ordered[name]) ordered[name] = grouped[name];
   });
@@ -305,9 +297,6 @@ function groupFixtures(fixtures) {
   return ordered;
 }
 
-/* ============================
-   Write to Firebase
-============================ */
 async function writeMatches(path, fixtures, label) {
   const grouped = groupFixtures(fixtures);
   const leaguesCount = Object.keys(grouped).length;
@@ -319,15 +308,15 @@ async function writeMatches(path, fixtures, label) {
 }
 
 /* ============================
-   matches_time helpers (OLD LOGIC)
+   matches_time (TODAY only)
+   نفس الفكرة القديمة: بنخزن أوقات مباريات اليوم علشان
+   نقرر نسحب تحديثات اليوم ولا لأ
 ============================ */
-
-// بيبني قائمة أوقات مباريات "اليوم" فقط (بعد الفلتر)
 function buildTodayMatchesTime(fixtures) {
   return fixtures
     .filter((m) => LEAGUES[m.league?.id]) // نفس فلتر البطولات
     .map((m) => {
-      const dt = dayjs(m.fixture.date).tz("Africa/Cairo");
+      const dt = dayjs(m.fixture.date).tz(TZ);
       return {
         time: dt.format("HH:mm"),
         fixture_id: m.fixture.id,
@@ -345,10 +334,10 @@ function normalizeMatchesTime(raw) {
   return [];
 }
 
-// بيرجع true لو احنا داخل نافذة ماتش (قبل/بعد/أثناء)
+// بيرجع true لو فيه ماتش داخل نافذة (قبلها/أثناءها/بعدها شوية)
 function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo) {
-  const PRE_START_MIN = Number(process.env.PRE_START_MIN || 0); // قبل المباراة بكام دقيقة
-  const MATCH_WINDOW_MIN = Number(process.env.MATCH_WINDOW_MIN || 160); // نافذة بعد بداية المباراة
+  const PRE_START_MIN = Number(process.env.PRE_START_MIN || 0);   // قبل المباراة بكام دقيقة
+  const MATCH_WINDOW_MIN = Number(process.env.MATCH_WINDOW_MIN || 160); // بعد البداية بكام دقيقة
 
   const list = normalizeMatchesTime(matchesTimeRaw);
 
@@ -375,7 +364,9 @@ function shouldFetchNowFromMatchesTime(matchesTimeRaw, nowCairo) {
   return false;
 }
 
-// الحالات اللي نعتبرها "ماتش شغال فعليًا"
+/* ============================
+   yesterday_active logic
+============================ */
 const ACTIVE_STATUSES = new Set([
   "1H",
   "2H",
@@ -386,8 +377,8 @@ const ACTIVE_STATUSES = new Set([
   "LIVE",
 ]);
 
-function hasLiveMatches(fixtures) {
-  const filtered = fixtures.filter((m) => LEAGUES[m.league?.id]);
+function hasLiveMatches(fixturesArray) {
+  const filtered = fixturesArray.filter((m) => LEAGUES[m.league?.id]);
   return filtered.some((m) => ACTIVE_STATUSES.has(m.fixture?.status?.short));
 }
 
@@ -396,7 +387,7 @@ function hasLiveMatches(fixtures) {
 ============================ */
 (async () => {
   try {
-    const now = dayjs().tz("Africa/Cairo");
+    const now = dayjs().tz(TZ);
 
     const todayStr = now.format("YYYY-MM-DD");
     const yesterdayStr = now.subtract(1, "day").format("YYYY-MM-DD");
@@ -407,7 +398,7 @@ function hasLiveMatches(fixtures) {
     const needsFullRefresh = !meta?.date || meta.date !== todayStr;
 
     // ============================
-    // 1) أول رن في اليوم → اسحب 3 أيام مرة واحدة
+    // 1) أول رن في اليوم: اسحب 3 أيام مرة واحدة
     // ============================
     if (needsFullRefresh) {
       console.log("🌙 New day detected -> fetching Yesterday/Today/Tomorrow (once)");
@@ -420,10 +411,9 @@ function hasLiveMatches(fixtures) {
       const wY = await writeMatches("matches_yesterday", yFixtures, "Yesterday");
       const wT = await writeMatches("matches_tomorrow", tFixtures, "Tomorrow");
 
-      // ✅ matches_time (لليوم فقط)
+      // matches_time for today only
       await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures) || []);
 
-      // ✅ هل أمس فيه لايف؟ لو آه هنكمّل نسحب أمس في الرنات اللي بعدها
       const yesterdayActive = hasLiveMatches(yFixtures);
 
       await db.ref("meta/today").set({
@@ -435,11 +425,7 @@ function hasLiveMatches(fixtures) {
         yesterday_active: yesterdayActive,
       });
 
-      await writeCronMeta({
-        status: "ok",
-        reason: "full_refresh",
-        extra: { today: todayStr, yesterday_active: yesterdayActive },
-      });
+      await writeCronMeta({ status: "ok", reason: "full_refresh", extra: { today: todayStr } });
 
       console.log("✅ Full refresh done");
       process.exit(0);
@@ -449,58 +435,55 @@ function hasLiveMatches(fixtures) {
     // 2) باقي اليوم
     // ============================
 
+    let didAnyFetch = false;
+
     // (A) تحديث أمس لو لسه active
     if (meta?.yesterday_active) {
       console.log("⏳ Yesterday still active -> fetching YESTERDAY update");
-
       const yFixtures = await fetchFixturesByDate(yesterdayStr, "Yesterday");
       const wY = await writeMatches("matches_yesterday", yFixtures, "Yesterday");
 
       const stillActive = hasLiveMatches(yFixtures);
       await db.ref("meta/today/yesterday_active").set(stillActive);
       await db.ref("meta/today/yesterday_matches_count").set(wY.matchesCount);
-      await db.ref("meta/today/updated_at").set(new Date().toISOString());
+
+      didAnyFetch = true;
 
       if (!stillActive) {
         console.log("✅ Yesterday finished -> stop fetching yesterday from now on");
       }
     }
 
-    // (B) قرار تحديث اليوم حسب matches_time
+    // (B) قرار تحديث اليوم اعتمادًا على matches_time
     const mtSnap = await db.ref("matches_time").once("value");
     const matchesTime = mtSnap.val();
 
     const shouldFetchToday = shouldFetchNowFromMatchesTime(matchesTime, now);
 
     if (!shouldFetchToday) {
-      await writeCronMeta({
-        status: "skip",
-        reason: "no_live_or_near_today_matches",
-        extra: { today: todayStr },
-      });
-
       console.log("🛑 No live/near matches now -> skipping TODAY API call");
-      process.exit(0);
+    } else {
+      console.log("🔥 Match window active -> fetching TODAY");
+      const todayFixtures = await fetchFixturesByDate(todayStr, "Today");
+      const wToday = await writeMatches("matches_today", todayFixtures, "Today");
+
+      await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures) || []);
+      await db.ref("meta/today/today_matches_count").set(wToday.matchesCount);
+
+      didAnyFetch = true;
     }
 
-    console.log("🔥 Match window active -> fetching TODAY");
-
-    const todayFixtures = await fetchFixturesByDate(todayStr, "Today");
-    const wToday = await writeMatches("matches_today", todayFixtures, "Today");
-
-    // تحديث matches_time بعد التحديث
-    await db.ref("matches_time").set(buildTodayMatchesTime(todayFixtures) || []);
-
+    // updated_at دايمًا
     await db.ref("meta/today/updated_at").set(new Date().toISOString());
-    await db.ref("meta/today/today_matches_count").set(wToday.matchesCount);
 
+    // مهم جدًا: نكتب meta/cron كل رن (حتى لو skip) علشان التايمر ما يعلقش
     await writeCronMeta({
-      status: "ok",
-      reason: "today_refresh",
-      extra: { today: todayStr, today_matches_count: wToday.matchesCount },
+      status: didAnyFetch ? "ok" : "skip",
+      reason: didAnyFetch ? "partial_refresh" : "no_fetch_needed",
+      extra: { today: todayStr },
     });
 
-    console.log("✅ Today refresh done");
+    console.log("✅ Run finished");
     process.exit(0);
   } catch (err) {
     console.error("❌ Updater crashed:", err?.message || err);
