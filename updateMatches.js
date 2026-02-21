@@ -191,7 +191,7 @@ const LEAGUE_ORDER = [
   "Ligue 1",
   "Egyptian League",
   "Saudi Pro League",
-  "Moroccan Pro League"
+  "Moroccan Pro League",
 
   "FA Cup",
   "EFL Cup",
