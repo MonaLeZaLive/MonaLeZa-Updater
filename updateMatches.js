@@ -366,26 +366,33 @@ async function writeMatches(path, fixtures, label) {
     await db.ref("meta/today/updated_at").set(new Date().toISOString());
     await db.ref("meta/today/today_matches_count").set(wToday.matchesCount);
 
-    await writeCronMeta({
-      status: "ok",
-      reason: "today_update",
-      extra: { today: todayStr, today_matches_count: wToday.matchesCount },
-    });
+   const FALLBACK_INTERVAL_MIN = 720; // احتياطي (12 ساعة) لو أول مرة
 
-    console.log("✅ Today update done");
-    process.exit(0);
-  } catch (err) {
-    console.error("❌ Job crashed:", err?.message || err);
+async function writeCronMeta({ status, reason, extra = {} }) {
+  const nowMs = Date.now();
 
-    try {
-      await writeCronMeta({
-        status: "error",
-        reason: err?.message || "unknown_error",
-      });
-    } catch (e) {
-      console.error("❌ Failed to write meta/cron:", e?.message || e);
-    }
+  // ✅ اقرأ آخر run قبل ما تكتب الجديد
+  const prevSnap = await db.ref("meta/cron/last_run_at").once("value");
+  const prevLastRunAt = Number(prevSnap.val() || 0);
 
+  // ✅ لو في run قبل كده: احسب الفرق الحقيقي
+  const intervalMs =
+    prevLastRunAt > 0 ? Math.max(60_000, nowMs - prevLastRunAt) : FALLBACK_INTERVAL_MIN * 60 * 1000;
+
+  const intervalMin = Math.round(intervalMs / 60000);
+  const nextRunAt = nowMs + intervalMs;
+
+  await db.ref("meta/cron").set({
+    interval_min: intervalMin,
+    last_run_at: nowMs,
+    next_run_at: nextRunAt,
+
+    status,          // "ok" | "skip" | "error"
+    reason: reason || "",
+
+    ...extra,
+  });
+}
     process.exit(1);
   }
 })();
