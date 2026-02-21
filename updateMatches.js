@@ -1,26 +1,28 @@
 /* =========================================================
-   MonaLeZa Live - Clean Cron (No Filters, No League Ordering)
-   - Fetch fixtures from API-Football
-   - Write grouped data to Firebase Realtime Database
-   - Write meta/cron for the timer in the app
+   MonaLeZa Live - Clean Cron (No Filters)
+   - Fetch fixtures by DATE (API-Football requirement)
+   - Group by league (no filtering / no ordering)
+   - Write to Firebase Realtime Database:
+       matches_today
+       matches_yesterday
+       matches_tomorrow
+       meta/today
+       meta/cron
+   - Timer interval comes from ENV: CRON_INTERVAL_MIN
    ========================================================= */
 
-/* ====== HTTP Client ====== */
 import axios from "axios";
-
-/* ====== Dates & Timezones ====== */
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc.js";
 import timezone from "dayjs/plugin/timezone.js";
+import admin from "firebase-admin";
+
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-/* ====== Firebase Admin (Server) ====== */
-import admin from "firebase-admin";
-
-/* =========================================================
-   1) Firebase Admin Init
-   ========================================================= */
+/* ============================
+   Firebase Admin Init
+============================ */
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -31,9 +33,9 @@ admin.initializeApp({
 
 const db = admin.database();
 
-/* =========================================================
-   2) API-Football Init
-   ========================================================= */
+/* ============================
+   API-Football Init
+============================ */
 const api = axios.create({
   baseURL: "https://v3.football.api-sports.io",
   headers: {
@@ -41,10 +43,9 @@ const api = axios.create({
   },
 });
 
-/* =========================================================
-   3) Cron Meta (Timer for the app)
-   - interval is read from ENV so it changes automatically
-   ========================================================= */
+/* ============================
+   Cron Meta (Timer)
+============================ */
 const CRON_INTERVAL_MIN = Number(process.env.CRON_INTERVAL_MIN || 15);
 const CRON_INTERVAL_MS = CRON_INTERVAL_MIN * 60 * 1000;
 
@@ -62,43 +63,34 @@ async function writeCronMeta({ status, reason, extra = {} }) {
   });
 }
 
-/* =========================================================
-   4) Fetch fixtures by date (robust)
-   - Use from/to instead of date to avoid "tomorrow=0" issues
-   ========================================================= */
-async function fetchFixturesByDate(dateStr) {
+/* ============================
+   Fetch fixtures by DATE
+   (No from/to — API needs extra params with from/to)
+============================ */
+async function fetchFixturesByDate(dateStr, label) {
   const res = await api.get("/fixtures", {
     params: {
-      from: dateStr,
-      to: dateStr,
+      date: dateStr,
       timezone: "Africa/Cairo",
     },
   });
 
-  // Simple logs to see what is returned
-  console.log(`[API] date=${dateStr} status=${res.status}`);
-  console.log(`[API] results=${res.data?.results ?? "?"}`);
-  if (res.data?.errors && Object.keys(res.data.errors).length) {
-    console.log("[API] errors:", res.data.errors);
+  console.log(`[API] ${label} date=${dateStr} status=${res.status}`);
+  console.log(`[API] ${label} results=${res.data?.results ?? "?"}`);
+
+  // API sometimes returns 200 even if errors exist, so we must check errors.
+  const errors = res.data?.errors || {};
+  if (errors && Object.keys(errors).length) {
+    console.log(`[API] ${label} errors:`, errors);
   }
 
   return res.data?.response || [];
 }
 
-/* =========================================================
-   5) Transform: Group fixtures by league (NO FILTERS)
-   Output shape:
-   {
-     "<leagueKey>": {
-       league_id,
-       league_name_ar,
-       league_name_en,
-       league_logo,
-       matches: [...]
-     },
-     ...
-   }
-   ========================================================= */
+/* ============================
+   Group fixtures by League
+   (No filters)
+============================ */
 function groupFixtures(fixtures) {
   const grouped = {};
 
@@ -107,14 +99,14 @@ function groupFixtures(fixtures) {
     const leagueName = m.league?.name ?? "Unknown League";
     const leagueLogo = m.league?.logo ?? "";
 
-    // Use league id as stable key
+    // stable key = league id
     const leagueKey = String(leagueId);
 
     if (!grouped[leagueKey]) {
       grouped[leagueKey] = {
         league_id: leagueId,
-        league_name_ar: leagueName, // no mapping => same name
-        league_name_en: leagueName, // no mapping => same name
+        league_name_ar: leagueName,
+        league_name_en: leagueName,
         league_logo: leagueLogo,
         matches: [],
       };
@@ -126,7 +118,6 @@ function groupFixtures(fixtures) {
       status: m.fixture?.status?.short || "NS",
       minute: m.fixture?.status?.elapsed ?? null,
 
-      // Cairo time formatted
       time: m.fixture?.date
         ? dayjs(m.fixture.date).tz("Africa/Cairo").format("HH:mm")
         : "—",
@@ -140,18 +131,15 @@ function groupFixtures(fixtures) {
       away_score: m.goals?.away ?? null,
 
       stadium: m.fixture?.venue?.name ?? "—",
-      // لو عايز تحط حاجات زيادة مستقبلاً:
-      // country: m.league?.country ?? "",
-      // round: m.league?.round ?? "",
     });
   });
 
   return grouped;
 }
 
-/* =========================================================
-   6) Write data to Firebase
-   ========================================================= */
+/* ============================
+   Write grouped data to Firebase
+============================ */
 async function writeMatches(path, fixtures, label) {
   const grouped = groupFixtures(fixtures);
 
@@ -167,11 +155,9 @@ async function writeMatches(path, fixtures, label) {
   return { leaguesCount, matchesCount };
 }
 
-/* =========================================================
-   7) Main Job
-   - Once per day: fetch (Yesterday / Today / Tomorrow)
-   - Other runs: fetch Today only
-   ========================================================= */
+/* ============================
+   Main
+============================ */
 (async () => {
   try {
     const now = dayjs().tz("Africa/Cairo");
@@ -180,18 +166,17 @@ async function writeMatches(path, fixtures, label) {
     const yesterdayStr = now.subtract(1, "day").format("YYYY-MM-DD");
     const tomorrowStr = now.add(1, "day").format("YYYY-MM-DD");
 
-    // read meta/today to know if new day
+    // read meta/today to decide full refresh
     const metaSnap = await db.ref("meta/today").once("value");
     const meta = metaSnap.val();
-
     const needsFullRefresh = !meta?.date || meta.date !== todayStr;
 
     if (needsFullRefresh) {
       console.log("🌙 New day detected -> fetching Yesterday/Today/Tomorrow (once)");
 
-      const todayFixtures = await fetchFixturesByDate(todayStr);
-      const yFixtures = await fetchFixturesByDate(yesterdayStr);
-      const tFixtures = await fetchFixturesByDate(tomorrowStr);
+      const todayFixtures = await fetchFixturesByDate(todayStr, "Today");
+      const yFixtures = await fetchFixturesByDate(yesterdayStr, "Yesterday");
+      const tFixtures = await fetchFixturesByDate(tomorrowStr, "Tomorrow");
 
       const wToday = await writeMatches("matches_today", todayFixtures, "Today");
       const wY = await writeMatches("matches_yesterday", yFixtures, "Yesterday");
@@ -208,21 +193,17 @@ async function writeMatches(path, fixtures, label) {
       await writeCronMeta({
         status: "ok",
         reason: "full_refresh",
-        extra: {
-          today: todayStr,
-          yesterday: yesterdayStr,
-          tomorrow: tomorrowStr,
-        },
+        extra: { today: todayStr },
       });
 
       console.log("✅ Full refresh done");
       process.exit(0);
     }
 
-    // Not first run today -> update Today only
+    // same day -> update today only
     console.log("🔁 Same day -> fetching TODAY only");
 
-    const todayFixtures = await fetchFixturesByDate(todayStr);
+    const todayFixtures = await fetchFixturesByDate(todayStr, "Today");
     const wToday = await writeMatches("matches_today", todayFixtures, "Today");
 
     await db.ref("meta/today/updated_at").set(new Date().toISOString());
@@ -231,10 +212,7 @@ async function writeMatches(path, fixtures, label) {
     await writeCronMeta({
       status: "ok",
       reason: "today_update",
-      extra: {
-        today: todayStr,
-        today_matches_count: wToday.matchesCount,
-      },
+      extra: { today: todayStr, today_matches_count: wToday.matchesCount },
     });
 
     console.log("✅ Today update done");
